@@ -238,72 +238,104 @@ body.mode-favourites:not(.has-favourites) .filters {
   min-height: 1.2em;
 }
 
-/* Tom Select theme — override default white control/dropdown */
+/* Tom Select — dark theme */
+
+.ts-wrapper {
+  color: var(--bp-text);
+}
 
 .ts-wrapper.single .ts-control,
 .ts-wrapper.single.input-active .ts-control,
 .ts-wrapper.focus .ts-control,
-.ts-wrapper.dropdown-active .ts-control {
+.ts-wrapper.dropdown-active .ts-control,
+.ts-wrapper.single.input-active.focus .ts-control {
   padding: 10px 36px 10px 12px;
   border-radius: var(--bp-radius);
   border: 1px solid var(--bp-border);
   background: var(--bp-elevated) !important;
   background-color: var(--bp-elevated) !important;
-  color: var(--bp-text);
-  box-shadow: none;
+  color: var(--bp-text) !important;
+  box-shadow: none !important;
   min-height: 44px;
+  color-scheme: dark;
 }
 
 .ts-wrapper.single.input-active .ts-control,
 .ts-wrapper.focus .ts-control,
 .ts-wrapper.dropdown-active .ts-control {
-  border-color: var(--bp-accent);
-  box-shadow: 0 0 0 3px var(--bp-accent-soft);
+  border-color: var(--bp-accent) !important;
+  box-shadow: 0 0 0 3px var(--bp-accent-soft) !important;
 }
 
+.ts-wrapper .ts-control > input,
 .ts-wrapper.single .ts-control > input,
-.ts-wrapper.single.input-active .ts-control > input {
+.ts-wrapper.single.input-active .ts-control > input,
+.ts-wrapper.focus .ts-control > input {
   color: var(--bp-text) !important;
+  -webkit-text-fill-color: var(--bp-text) !important;
   background: transparent !important;
-  caret-color: var(--bp-accent);
+  background-color: transparent !important;
+  caret-color: var(--bp-accent) !important;
+  opacity: 1 !important;
+}
+
+.ts-wrapper .ts-control > input::placeholder {
+  color: #6b6b6b !important;
+  -webkit-text-fill-color: #6b6b6b !important;
+  opacity: 1;
 }
 
 .ts-wrapper.single.input-active .ts-control .item {
-  display: none;
+  display: none !important;
 }
 
+.ts-control,
 .ts-control .item {
-  color: var(--bp-text);
-  background: transparent;
-  border: none;
+  color: var(--bp-text) !important;
+  background: transparent !important;
+  border: none !important;
+  text-shadow: none !important;
+}
+
+.ts-wrapper.plugin-clear_button .clear-button,
+.ts-wrapper .clear-button {
+  color: var(--bp-muted);
 }
 
 .ts-wrapper .ts-control::after {
-  border-color: var(--bp-muted) transparent transparent;
+  border-color: var(--bp-muted) transparent transparent !important;
 }
 
 .ts-wrapper.dropdown-active .ts-control::after {
-  border-color: transparent transparent var(--bp-muted);
+  border-color: transparent transparent var(--bp-muted) !important;
 }
 
 .ts-dropdown,
-.ts-dropdown.single {
+.ts-dropdown.single,
+.ts-dropdown.plugin-dropdown_input {
   background: var(--bp-panel) !important;
   background-color: var(--bp-panel) !important;
-  border: 1px solid var(--bp-border);
+  border: 1px solid var(--bp-border) !important;
   border-radius: var(--bp-radius);
-  color: var(--bp-text);
+  color: var(--bp-text) !important;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
   z-index: 100;
+  color-scheme: dark;
+}
+
+.ts-dropdown .ts-dropdown-content {
+  background: var(--bp-panel) !important;
+  color: var(--bp-text) !important;
 }
 
 .ts-dropdown .option,
 .ts-dropdown .optgroup-header,
-.ts-dropdown .no-results {
+.ts-dropdown .no-results,
+.ts-dropdown .create {
   padding: 10px 12px;
-  color: var(--bp-text);
-  background: transparent;
-  border: none;
+  color: var(--bp-text) !important;
+  background: transparent !important;
+  border: none !important;
 }
 
 .ts-dropdown .option.active,
@@ -311,11 +343,12 @@ body.mode-favourites:not(.has-favourites) .filters {
 .ts-dropdown .create.active {
   background: var(--bp-accent-soft) !important;
   color: var(--bp-text) !important;
-  border: none;
-  box-shadow: none;
+  border: none !important;
+  box-shadow: none !important;
 }
 
-.ts-dropdown .option.selected {
+.ts-dropdown .option.selected,
+.ts-dropdown .option.selected.active {
   background: var(--bp-accent) !important;
   color: #fff !important;
 }
