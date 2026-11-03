@@ -13,6 +13,7 @@
   let listMode = "favourites";
   let playlistLoaded = false;
   let playlistLoading = false;
+  let listCursorIndex = -1;
 
   const HEART_OUTLINE =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
@@ -36,8 +37,17 @@
     playerShell: document.querySelector(".player-shell"),
     listFavouritesBtn: document.getElementById("listFavouritesBtn"),
     listAllBtn: document.getElementById("listAllBtn"),
-    filtersPanel: document.getElementById("filtersPanel")
+    filtersPanel: document.getElementById("filtersPanel"),
+    volumeHud: document.getElementById("volumeHud"),
+    volumeHudValue: document.getElementById("volumeHudValue"),
+    volumeTubeSteps: document.getElementById("volumeTubeSteps")
   };
+
+  const VOLUME_STEP = 0.05;
+  const VOLUME_DOT_COUNT = 20;
+  let volumeHudHideTimer = null;
+  let volumeHudRemoveTimer = null;
+  let volumeDots = [];
 
   function setStatus(message) {
     els.status.textContent = message;
@@ -298,14 +308,26 @@
       return;
     }
 
+    if (listCursorIndex < 0 || listCursorIndex >= filteredChannels.length) {
+      const activeIndex = getActiveIndex();
+      listCursorIndex = activeIndex >= 0 ? activeIndex : 0;
+    }
+
     const fragment = document.createDocumentFragment();
 
-    filteredChannels.forEach(function (channel) {
+    filteredChannels.forEach(function (channel, index) {
       const item = document.createElement("div");
       item.className =
-        "channel" + (sameChannel(activeChannel, channel) ? " active" : "");
-      item.setAttribute("role", "button");
-      item.tabIndex = 0;
+        "channel" +
+        (sameChannel(activeChannel, channel) ? " active" : "") +
+        (index === listCursorIndex ? " is-cursor" : "");
+      item.setAttribute("role", "option");
+      item.id = "channel-option-" + index;
+      item.setAttribute(
+        "aria-selected",
+        String(sameChannel(activeChannel, channel))
+      );
+      item.tabIndex = -1;
 
       const logo = document.createElement("img");
       logo.src = channel.logo || "";
@@ -335,22 +357,19 @@
       item.appendChild(info);
       item.appendChild(createHeartButton(channel));
 
-      function activate() {
+      item.addEventListener("click", function () {
+        listCursorIndex = index;
         playChannel(channel);
-      }
-
-      item.addEventListener("click", activate);
-      item.addEventListener("keydown", function (event) {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          activate();
-        }
       });
 
       fragment.appendChild(item);
     });
 
     els.channelList.appendChild(fragment);
+    els.channelList.setAttribute(
+      "aria-activedescendant",
+      "channel-option-" + listCursorIndex
+    );
 
     if (listMode === "favourites") {
       setStatus(
@@ -362,7 +381,15 @@
   }
 
   function playChannel(channel) {
+    const keepListFocus =
+      isInChannelList(document.activeElement) ||
+      document.activeElement === els.channelList;
+
     activeChannel = channel;
+    const playingIndex = filteredChannels.findIndex(function (item) {
+      return sameChannel(item, channel);
+    });
+    if (playingIndex >= 0) listCursorIndex = playingIndex;
 
     els.channelTitle.textContent = channel.name;
     els.channelDetails.textContent =
@@ -381,7 +408,10 @@
     renderChannels();
     scrollActiveIntoView();
 
-    if (window.matchMedia("(max-width: 900px)").matches) {
+    if (keepListFocus) {
+      els.channelList.focus({ preventScroll: true });
+      updateListCursorUI();
+    } else if (window.matchMedia("(max-width: 900px)").matches) {
       els.playerStage.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }
@@ -413,6 +443,57 @@
     }
 
     playChannel(filteredChannels[0]);
+  }
+
+  function buildVolumeTube() {
+    if (!els.volumeTubeSteps) return;
+
+    els.volumeTubeSteps.innerHTML = "";
+    volumeDots = [];
+
+    for (let i = 1; i <= VOLUME_DOT_COUNT; i += 1) {
+      const dot = document.createElement("span");
+      dot.className = "volume-dot";
+      dot.dataset.step = String(i);
+      els.volumeTubeSteps.appendChild(dot);
+      volumeDots.push(dot);
+    }
+  }
+
+  function updateVolumeTube(level) {
+    const stepsOn = Math.round(
+      Math.min(1, Math.max(0, level)) / VOLUME_STEP
+    );
+
+    volumeDots.forEach(function (dot, index) {
+      const step = index + 1;
+      const isOn = step <= stepsOn;
+      dot.classList.toggle("is-on", isOn);
+      dot.classList.toggle("is-top", isOn && step === stepsOn);
+    });
+  }
+
+  function showVolumeHud(level) {
+    if (!els.volumeHud || !els.volumeHudValue) return;
+
+    const percent = Math.round(Math.min(1, Math.max(0, level)) * 100);
+    els.volumeHudValue.textContent = percent + "%";
+    updateVolumeTube(level);
+    els.volumeHud.hidden = false;
+
+    requestAnimationFrame(function () {
+      els.volumeHud.classList.add("is-visible");
+    });
+
+    if (volumeHudHideTimer) clearTimeout(volumeHudHideTimer);
+    if (volumeHudRemoveTimer) clearTimeout(volumeHudRemoveTimer);
+
+    volumeHudHideTimer = setTimeout(function () {
+      els.volumeHud.classList.remove("is-visible");
+      volumeHudRemoveTimer = setTimeout(function () {
+        els.volumeHud.hidden = true;
+      }, 350);
+    }, 1000);
   }
 
   async function loadPlaylist(options) {
@@ -552,6 +633,140 @@
     );
   }
 
+  function isInChannelList(target) {
+    return !!(els.channelList && target && els.channelList.contains(target));
+  }
+
+  function isInPlayer(target) {
+    const player = BaliPlex.player.getInstance();
+    const root = player && player.el();
+    if (root && target && root.contains(target)) return true;
+    return !!(els.playerShell && target && els.playerShell.contains(target));
+  }
+
+  function isFavouriteButton(target) {
+    return !!(target && target.closest && target.closest(".fav-btn"));
+  }
+
+  function updateListCursorUI() {
+    const items = els.channelList.querySelectorAll(".channel");
+    items.forEach(function (item, index) {
+      item.classList.toggle("is-cursor", index === listCursorIndex);
+    });
+
+    const current = items[listCursorIndex];
+    if (current) {
+      current.scrollIntoView({ block: "nearest" });
+      els.channelList.setAttribute("aria-activedescendant", current.id);
+    }
+  }
+
+  function moveListCursor(delta) {
+    if (!filteredChannels.length) return;
+
+    if (listCursorIndex < 0) {
+      const activeIndex = getActiveIndex();
+      listCursorIndex = activeIndex >= 0 ? activeIndex : 0;
+    } else {
+      listCursorIndex =
+        (listCursorIndex + delta + filteredChannels.length) %
+        filteredChannels.length;
+    }
+
+    updateListCursorUI();
+  }
+
+  function handleListShortcut(event) {
+    if (!filteredChannels.length) return false;
+    if (isFavouriteButton(event.target) && (event.key === " " || event.key === "Enter")) {
+      return false;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      moveListCursor(1);
+      return true;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      moveListCursor(-1);
+      return true;
+    }
+
+    if (event.key === " " || event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      const channel =
+        filteredChannels[listCursorIndex] || filteredChannels[0];
+      if (channel) {
+        listCursorIndex = Math.max(0, listCursorIndex);
+        playChannel(channel);
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  function handlePlayerShortcut(event) {
+    if (event.key === "ArrowLeft" || event.key === "[") {
+      event.preventDefault();
+      event.stopPropagation();
+      playRelative(-1);
+      return true;
+    }
+
+    if (event.key === "ArrowRight" || event.key === "]") {
+      event.preventDefault();
+      event.stopPropagation();
+      playRelative(1);
+      return true;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      showVolumeHud(BaliPlex.player.adjustVolume(VOLUME_STEP));
+      return true;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      showVolumeHud(BaliPlex.player.adjustVolume(-VOLUME_STEP));
+      return true;
+    }
+
+    return false;
+  }
+
+  function handleGlobalShortcut(event) {
+    if (isTypingTarget(event.target)) return false;
+
+    if (isInChannelList(event.target)) {
+      return handleListShortcut(event);
+    }
+
+    if (isInPlayer(event.target) || event.target === document.body) {
+      return handlePlayerShortcut(event);
+    }
+
+    // Header / other UI: keep channel zapping + volume available.
+    return handlePlayerShortcut(event);
+  }
+
+  function focusPlayerSoon() {
+    requestAnimationFrame(function () {
+      BaliPlex.player.focus();
+      setTimeout(function () {
+        BaliPlex.player.focus();
+      }, 50);
+    });
+  }
+
   function bindEvents() {
     els.search.addEventListener("input", renderChannels);
     els.refreshBtn.addEventListener("click", function () {
@@ -579,14 +794,14 @@
       playRelative(1);
     });
 
-    document.addEventListener("keydown", function (event) {
-      if (isTypingTarget(event.target)) return;
-      if (event.key === "ArrowLeft" || event.key === "[") {
-        event.preventDefault();
-        playRelative(-1);
-      } else if (event.key === "ArrowRight" || event.key === "]") {
-        event.preventDefault();
-        playRelative(1);
+    // Capture phase so shortcuts still work when the player / fullscreen has focus.
+    document.addEventListener("keydown", handleGlobalShortcut, true);
+
+    els.channelList.addEventListener("keydown", handleListShortcut);
+    els.channelList.addEventListener("click", function () {
+      // Keep keyboard focus on the list after clicking a row (except fav button).
+      if (!isFavouriteButton(document.activeElement)) {
+        els.channelList.focus({ preventScroll: true });
       }
     });
 
@@ -597,6 +812,14 @@
         }
       });
     }
+
+    document.addEventListener("fullscreenchange", focusPlayerSoon);
+    document.addEventListener("webkitfullscreenchange", focusPlayerSoon);
+
+    BaliPlex.player.onFullscreenChange(function () {
+      focusPlayerSoon();
+      setPlayerNavVisible(true);
+    });
   }
 
   function boot() {
@@ -622,11 +845,22 @@
       BaliPlex.player.mountOverlay(playerNav);
     }
 
+    if (els.volumeHud) {
+      BaliPlex.player.mountOverlay(els.volumeHud);
+    }
+
+    const playerEl = BaliPlex.player.getInstance().el();
+    if (playerEl) {
+      playerEl.addEventListener("keydown", handlePlayerShortcut);
+    }
+
+    buildVolumeTube();
     initSelects();
     bindEvents();
     updateNavButtons();
     setPlayerNavVisible(false);
     showFavourites();
+    BaliPlex.player.focus();
 
     // Warm country metadata in the background so filters are ready
     // when the user opens all channels.

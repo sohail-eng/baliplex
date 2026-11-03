@@ -97,7 +97,13 @@
         <span id="status">Ready</span>
       </div>
 
-      <div id="channelList">
+      <div
+        id="channelList"
+        class="channel-list"
+        tabindex="0"
+        role="listbox"
+        aria-label="Channels"
+      >
         <div class="empty">Loading favourites…</div>
       </div>
     </aside>
@@ -139,12 +145,19 @@
             preload="auto"
           ></video>
         </div>
+
+        <div id="volumeHud" class="volume-hud" hidden aria-live="polite">
+          <div class="volume-tube" aria-hidden="true">
+            <div id="volumeTubeSteps" class="volume-tube-steps"></div>
+          </div>
+          <span id="volumeHudValue" class="volume-hud-value">50%</span>
+        </div>
       </div>
 
       <div class="now-playing">
         <h2 id="channelTitle">Select a channel</h2>
         <p id="channelDetails">Choose a channel from the list to start watching.</p>
-        <p class="hint">Use ← → or [ ] to switch channels</p>
+        <p class="hint">Player: ← → channels · ↑ ↓ volume · List: ↑ ↓ browse · Space play</p>
       </div>
     </main>
   </div>

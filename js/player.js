@@ -22,12 +22,17 @@ BaliPlex.player = (function () {
       liveui: true,
       inactivityTimeout: 3000,
       playbackRates: [],
+      // Keep BaliPlex shortcuts (channels / volume HUD); don't let Video.js steal arrows.
+      userActions: {
+        hotkeys: false
+      },
       controlBar: {
         pictureInPictureToggle: false
       }
     });
 
     player.addClass("vjs-baliplex");
+    player.el().setAttribute("tabindex", "0");
 
     player.on("error", function () {
       if (onError) {
@@ -104,12 +109,49 @@ BaliPlex.player = (function () {
     return player;
   }
 
+  function adjustVolume(delta) {
+    if (!player) return 0;
+
+    if (player.muted() && delta > 0) {
+      player.muted(false);
+    }
+
+    const next = Math.min(1, Math.max(0, (player.volume() || 0) + delta));
+    player.volume(next);
+
+    if (next === 0) {
+      player.muted(true);
+    }
+
+    return next;
+  }
+
+  function focus() {
+    if (!player) return;
+    const root = player.el();
+    if (!root) return;
+    root.setAttribute("tabindex", "0");
+    try {
+      root.focus({ preventScroll: true });
+    } catch (error) {
+      root.focus();
+    }
+  }
+
+  function onFullscreenChange(handler) {
+    if (!player || typeof handler !== "function") return;
+    player.on("fullscreenchange", handler);
+  }
+
   return {
     init,
     play,
     stop,
     getInstance,
     mountOverlay,
-    hasSource
+    hasSource,
+    adjustVolume,
+    focus,
+    onFullscreenChange
   };
 })();
