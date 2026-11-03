@@ -399,6 +399,22 @@
     playChannel(filteredChannels[index]);
   }
 
+  function playFirstAvailable() {
+    if (BaliPlex.player.hasSource() && activeChannel) {
+      return;
+    }
+
+    if (!filteredChannels.length) {
+      els.channelDetails.textContent =
+        listMode === "favourites" && favouritesApi.count() === 0
+          ? "Add a favourite or open All channels, then press play."
+          : "No channels in the current list.";
+      return;
+    }
+
+    playChannel(filteredChannels[0]);
+  }
+
   async function loadPlaylist(options) {
     const opts = options || {};
     if (playlistLoading) return;
@@ -588,6 +604,7 @@
       onError: function (message) {
         els.channelDetails.textContent = message;
       },
+      onPlayRequest: playFirstAvailable,
       onUserActive: function () {
         if (window.matchMedia("(min-width: 901px)").matches) {
           setPlayerNavVisible(true);

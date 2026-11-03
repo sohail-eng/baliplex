@@ -4,14 +4,19 @@ BaliPlex.player = (function () {
   let player = null;
   let onError = null;
 
+  function hasSource() {
+    return !!(player && player.currentSrc());
+  }
+
   function init(videoElement, options) {
     onError = options && options.onError ? options.onError : null;
     const onUserActive = options && options.onUserActive;
     const onUserInactive = options && options.onUserInactive;
+    const onPlayRequest = options && options.onPlayRequest;
 
     player = videojs(videoElement, {
       controls: true,
-      autoplay: true,
+      autoplay: false,
       preload: "auto",
       fill: true,
       liveui: true,
@@ -36,6 +41,30 @@ BaliPlex.player = (function () {
 
     if (typeof onUserInactive === "function") {
       player.on("userinactive", onUserInactive);
+    }
+
+    if (typeof onPlayRequest === "function") {
+      player.ready(function () {
+        const bigPlay = player.getChild("bigPlayButton");
+        if (bigPlay) {
+          const originalHandleClick = bigPlay.handleClick.bind(bigPlay);
+          bigPlay.handleClick = function (event) {
+            if (!hasSource()) {
+              event.preventDefault();
+              event.stopPropagation();
+              onPlayRequest();
+              return;
+            }
+            originalHandleClick(event);
+          };
+        }
+      });
+
+      player.on("play", function () {
+        if (hasSource()) return;
+        player.pause();
+        onPlayRequest();
+      });
     }
 
     return player;
@@ -80,6 +109,7 @@ BaliPlex.player = (function () {
     play,
     stop,
     getInstance,
-    mountOverlay
+    mountOverlay,
+    hasSource
   };
 })();
