@@ -203,6 +203,10 @@
     BaliPlex.player.play(channel.url);
     renderChannels();
     scrollActiveIntoView();
+
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      els.playerStage.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }
 
   function playRelative(offset) {

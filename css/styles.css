@@ -545,33 +545,49 @@ main.stage {
     min-height: calc(100dvh - var(--bp-header-h));
   }
 
-  main.stage {
+  /* Channels first on small screens so the list is immediately visible */
+  aside.sidebar {
     order: 1;
+    flex: 1 1 auto;
+    border-right: none;
+    border-bottom: 1px solid var(--bp-border);
+    min-height: calc(100dvh - var(--bp-header-h) - 12px);
+    max-height: calc(100dvh - var(--bp-header-h) - 12px);
+  }
+
+  main.stage {
+    order: 2;
     flex: 0 0 auto;
     padding: 12px;
     overflow: visible;
   }
 
-  aside.sidebar {
-    order: 2;
-    flex: 1 1 auto;
-    border-right: none;
-    border-top: 1px solid var(--bp-border);
-    min-height: 60vh;
-  }
-
   #channelList {
     flex: 1 1 auto;
-    min-height: 50vh;
-    max-height: none;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   #playerStage {
     max-height: 42vh;
+    scroll-margin-top: calc(var(--bp-header-h) + 8px);
+  }
+
+  .player-shell {
+    scroll-margin-top: calc(var(--bp-header-h) + 8px);
+  }
+
+  .player-nav {
+    padding: 0 6px;
   }
 
   .now-playing h2 {
-    font-size: 1.6rem;
+    font-size: 1.45rem;
+  }
+
+  .now-playing p {
+    font-size: 0.85rem;
   }
 
   .hint {
