@@ -6,6 +6,8 @@ BaliPlex.player = (function () {
 
   function init(videoElement, options) {
     onError = options && options.onError ? options.onError : null;
+    const onUserActive = options && options.onUserActive;
+    const onUserInactive = options && options.onUserInactive;
 
     player = videojs(videoElement, {
       controls: true,
@@ -13,6 +15,7 @@ BaliPlex.player = (function () {
       preload: "auto",
       fill: true,
       liveui: true,
+      inactivityTimeout: 3000,
       playbackRates: [],
       controlBar: {
         pictureInPictureToggle: false
@@ -27,7 +30,20 @@ BaliPlex.player = (function () {
       }
     });
 
+    if (typeof onUserActive === "function") {
+      player.on("useractive", onUserActive);
+    }
+
+    if (typeof onUserInactive === "function") {
+      player.on("userinactive", onUserInactive);
+    }
+
     return player;
+  }
+
+  function mountOverlay(element) {
+    if (!player || !element) return;
+    player.el().appendChild(element);
   }
 
   function play(url) {
@@ -63,6 +79,7 @@ BaliPlex.player = (function () {
     init,
     play,
     stop,
-    getInstance
+    getInstance,
+    mountOverlay
   };
 })();

@@ -4,6 +4,8 @@ Cinema-style IPTV browser for watching live channels from the [iptv-org](https:/
 
 ## Features
 
+- Favourites list on start (saved in the browser); heart icon to add/remove
+- “Show all channels” loads the full playlist only when needed
 - Channel list with logo, country, and category
 - Searchable country and category filters
 - Video.js player with previous / next channel controls (`←` `→` or `[` `]`)
