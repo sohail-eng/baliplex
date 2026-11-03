@@ -530,25 +530,52 @@ main.stage {
     --bp-header-h: 64px;
   }
 
-  .app {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(280px, 48vh) 1fr;
-    height: calc(100vh - var(--bp-header-h));
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
-  aside.sidebar {
-    border-right: none;
-    border-top: 1px solid var(--bp-border);
-    order: 2;
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100dvh - var(--bp-header-h));
   }
 
   main.stage {
     order: 1;
+    flex: 0 0 auto;
     padding: 12px;
+    overflow: visible;
+  }
+
+  aside.sidebar {
+    order: 2;
+    flex: 1 1 auto;
+    border-right: none;
+    border-top: 1px solid var(--bp-border);
+    min-height: 60vh;
+  }
+
+  #channelList {
+    flex: 1 1 auto;
+    min-height: 50vh;
+    max-height: none;
   }
 
   #playerStage {
-    max-height: none;
+    max-height: 42vh;
+  }
+
+  .now-playing h2 {
+    font-size: 1.6rem;
+  }
+
+  .hint {
+    display: none;
   }
 
   .brand-tag {
@@ -568,5 +595,22 @@ main.stage {
 
   .filters {
     padding: 12px;
+    gap: 8px;
+  }
+
+  .filters .field {
+    gap: 4px;
+  }
+
+  .ts-wrapper.single .ts-control,
+  .ts-wrapper.single.input-active .ts-control,
+  .ts-wrapper.focus .ts-control,
+  .ts-wrapper.dropdown-active .ts-control {
+    min-height: 40px;
+    padding: 8px 36px 8px 12px;
+  }
+
+  #search {
+    padding: 10px 12px;
   }
 }
