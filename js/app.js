@@ -44,6 +44,8 @@
     channelTitle: document.getElementById("channelTitle"),
     channelDetails: document.getElementById("channelDetails"),
     refreshBtn: document.getElementById("refreshBtn"),
+    playbackToggle: document.getElementById("playbackToggle"),
+    playbackToggleLabel: document.getElementById("playbackToggleLabel"),
     prevBtn: document.getElementById("prevChannel"),
     nextBtn: document.getElementById("nextChannel"),
     playerStage: document.getElementById("playerStage"),
@@ -617,6 +619,58 @@
     }, PLAYLIST_STALL_SKIP_MS);
   }
 
+  function setPlaybackToggleState(state) {
+    if (!els.playbackToggle) return;
+
+    const isStop = state === "stop";
+    const label = isStop ? "Stop" : "Start";
+    const title = isStop ? "Stop streaming" : "Start streaming";
+
+    els.playbackToggle.dataset.state = isStop ? "stop" : "start";
+    els.playbackToggle.title = title;
+    els.playbackToggle.setAttribute("aria-label", title);
+    els.playbackToggle.disabled = !activeChannel;
+
+    if (els.playbackToggleLabel) {
+      els.playbackToggleLabel.textContent = label;
+    }
+  }
+
+  function stopStreaming() {
+    clearPlaybackSkipTimers();
+    playbackGeneration += 1;
+
+    BaliPlex.player.stop();
+    setPlayerNavVisible(false);
+    els.playerStage.classList.remove("is-playing");
+    setPlaybackToggleState("start");
+
+    if (activeChannel) {
+      els.channelDetails.textContent =
+        "Streaming stopped. Press Start to resume this channel.";
+    } else {
+      els.channelTitle.textContent = "Select a channel";
+      els.channelDetails.textContent =
+        "Choose a channel from the list to start watching.";
+    }
+  }
+
+  function startStreaming() {
+    if (!activeChannel) return;
+    playChannel(activeChannel);
+  }
+
+  function togglePlayback() {
+    if (!els.playbackToggle || els.playbackToggle.disabled) return;
+
+    if (els.playbackToggle.dataset.state === "stop") {
+      stopStreaming();
+      return;
+    }
+
+    startStreaming();
+  }
+
   function playChannel(channel) {
     clearPlaybackSkipTimers();
     playbackGeneration += 1;
@@ -647,6 +701,7 @@
     void els.playerStage.offsetWidth;
     els.playerStage.classList.add("is-playing");
     setPlayerNavVisible(true);
+    setPlaybackToggleState("stop");
 
     BaliPlex.player.play(channel.url);
     armPlaylistStallWatchdog(generation);
@@ -1136,6 +1191,10 @@
     els.listAllBtn.addEventListener("click", function () {
       showAllChannels();
     });
+
+    if (els.playbackToggle) {
+      els.playbackToggle.addEventListener("click", togglePlayback);
+    }
 
     els.prevBtn.addEventListener("click", function () {
       playRelative(-1);
