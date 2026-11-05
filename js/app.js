@@ -17,8 +17,11 @@
   let listCursorIndex = -1;
   let visibleCount = 0;
   let loadingMore = false;
+  let playbackErrorTimer = null;
+  let playbackGeneration = 0;
 
   const PAGE_SIZE = 20;
+  const PLAYBACK_ERROR_SKIP_MS = 5000;
 
   const HEART_OUTLINE =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
@@ -545,7 +548,39 @@
     }
   }
 
+  function clearPlaybackErrorSkip() {
+    if (playbackErrorTimer) {
+      clearTimeout(playbackErrorTimer);
+      playbackErrorTimer = null;
+    }
+  }
+
+  function scheduleSkipAfterPlaybackError(message) {
+    const generation = playbackGeneration;
+    clearPlaybackErrorSkip();
+
+    if (generation !== playbackGeneration) return;
+
+    if (filteredChannels.length < 2) {
+      els.channelDetails.textContent = message;
+      return;
+    }
+
+    els.channelDetails.textContent =
+      message + " Trying next channel in 5s…";
+
+    playbackErrorTimer = setTimeout(function () {
+      playbackErrorTimer = null;
+      // User already changed channel — never skip away from a working one.
+      if (generation !== playbackGeneration) return;
+      playRelative(1);
+    }, PLAYBACK_ERROR_SKIP_MS);
+  }
+
   function playChannel(channel) {
+    clearPlaybackErrorSkip();
+    playbackGeneration += 1;
+
     const keepListFocus =
       isInChannelList(document.activeElement) ||
       document.activeElement === els.channelList;
@@ -1100,9 +1135,8 @@
 
   function boot() {
     BaliPlex.player.init(document.getElementById("videoPlayer"), {
-      onError: function (message) {
-        els.channelDetails.textContent = message;
-      },
+      onError: scheduleSkipAfterPlaybackError,
+      onPlaying: clearPlaybackErrorSkip,
       onPlayRequest: playFirstAvailable,
       onUserActive: function () {
         if (window.matchMedia("(min-width: 901px)").matches) {

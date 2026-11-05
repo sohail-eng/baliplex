@@ -10,6 +10,7 @@ BaliPlex.player = (function () {
 
   function init(videoElement, options) {
     onError = options && options.onError ? options.onError : null;
+    const onPlaying = options && options.onPlaying;
     const onUserActive = options && options.onUserActive;
     const onUserInactive = options && options.onUserInactive;
     const onPlayRequest = options && options.onPlayRequest;
@@ -35,10 +36,18 @@ BaliPlex.player = (function () {
     player.el().setAttribute("tabindex", "0");
 
     player.on("error", function () {
-      if (onError) {
-        onError("Playback failed. This stream may be unavailable or unsupported.");
-      }
+      if (!onError) return;
+
+      const mediaError = player.error();
+      const message =
+        (mediaError && mediaError.message) ||
+        "The media could not be loaded, either because the server or network failed or because the format is not supported.";
+      onError(message);
     });
+
+    if (typeof onPlaying === "function") {
+      player.on("playing", onPlaying);
+    }
 
     if (typeof onUserActive === "function") {
       player.on("useractive", onUserActive);
