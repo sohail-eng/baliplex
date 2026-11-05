@@ -1,5 +1,5 @@
 (function () {
-  const { PLAYLIST_URL, COUNTRIES_URL } = BaliPlex.config;
+  const { PLAYLIST_URL, COUNTRIES_URL, CHANNELS_STORAGE_KEY } = BaliPlex.config;
   const { parseM3U, identifyCountry } = BaliPlex.parser;
   const favouritesApi = BaliPlex.favourites;
 
@@ -13,13 +13,21 @@
   let listMode = "favourites";
   let playlistLoaded = false;
   let playlistLoading = false;
+  let autoRefreshDone = false;
   let listCursorIndex = -1;
+  let visibleCount = 0;
+  let loadingMore = false;
+
+  const PAGE_SIZE = 20;
 
   const HEART_OUTLINE =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
 
   const HEART_FILLED =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" fill="currentColor"/></svg>';
+
+  const CHANNEL_PLACEHOLDER =
+    '<svg class="channel-logo-fallback" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 19h8M12 17v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9" cy="11" r="1.2" fill="currentColor"/><circle cx="12" cy="11" r="1.2" fill="currentColor"/><circle cx="15" cy="11" r="1.2" fill="currentColor"/></svg>';
 
   const els = {
     totalChannels: document.getElementById("totalChannels"),
@@ -285,12 +293,173 @@
     return button;
   }
 
-  function renderChannels() {
+  function usesPagedList() {
+    return listMode === "all";
+  }
+
+  function getRenderLimit() {
+    if (!usesPagedList()) return filteredChannels.length;
+    return Math.min(visibleCount, filteredChannels.length);
+  }
+
+  function updateAllListStatus() {
+    if (listMode !== "all" || !filteredChannels.length) return;
+
+    const shown = getRenderLimit();
+    const total = filteredChannels.length;
+    setStatus(
+      "Showing " +
+        shown.toLocaleString() +
+        " of " +
+        total.toLocaleString() +
+        " channels"
+    );
+  }
+
+  function removeLoadMoreMarker() {
+    const marker = els.channelList.querySelector(".list-load-more");
+    if (marker) marker.remove();
+  }
+
+  function syncLoadMoreMarker() {
+    removeLoadMoreMarker();
+    if (!usesPagedList()) return;
+    if (getRenderLimit() >= filteredChannels.length) return;
+
+    const marker = document.createElement("div");
+    marker.className = "list-load-more";
+    marker.setAttribute("aria-hidden", "true");
+    marker.textContent = loadingMore ? "Loading more…" : "Scroll for more";
+    els.channelList.appendChild(marker);
+  }
+
+  function createChannelLogo(channel) {
+    const wrap = document.createElement("div");
+    wrap.className = "channel-logo";
+
+    if (!channel.logo) {
+      wrap.classList.add("is-fallback");
+      wrap.innerHTML = CHANNEL_PLACEHOLDER;
+      return wrap;
+    }
+
+    const logo = document.createElement("img");
+    logo.src = channel.logo;
+    logo.alt = "";
+    logo.loading = "lazy";
+    logo.decoding = "async";
+    logo.onerror = function () {
+      wrap.classList.add("is-fallback");
+      wrap.innerHTML = CHANNEL_PLACEHOLDER;
+    };
+    wrap.appendChild(logo);
+    return wrap;
+  }
+
+  function createChannelItem(channel, index) {
+    const item = document.createElement("div");
+    item.className =
+      "channel" +
+      (sameChannel(activeChannel, channel) ? " active" : "") +
+      (index === listCursorIndex ? " is-cursor" : "");
+    item.setAttribute("role", "option");
+    item.id = "channel-option-" + index;
+    item.setAttribute(
+      "aria-selected",
+      String(sameChannel(activeChannel, channel))
+    );
+    item.tabIndex = -1;
+
+    const info = document.createElement("div");
+    info.className = "channel-info";
+
+    const name = document.createElement("div");
+    name.className = "channel-name";
+    name.textContent = channel.name;
+
+    const meta = document.createElement("div");
+    meta.className = "channel-meta";
+    const countryName =
+      channel.countryInfo?.name || channel.countryName || "Unknown Country";
+    meta.textContent = countryName + " · " + channel.group;
+
+    info.appendChild(name);
+    info.appendChild(meta);
+
+    item.appendChild(createChannelLogo(channel));
+    item.appendChild(info);
+    item.appendChild(createHeartButton(channel));
+
+    item.addEventListener("click", function () {
+      listCursorIndex = index;
+      playChannel(channel);
+    });
+
+    return item;
+  }
+
+  function appendChannelRange(fromIndex, toIndex) {
+    removeLoadMoreMarker();
+
+    const fragment = document.createDocumentFragment();
+    for (let index = fromIndex; index < toIndex; index += 1) {
+      fragment.appendChild(createChannelItem(filteredChannels[index], index));
+    }
+    els.channelList.appendChild(fragment);
+    syncLoadMoreMarker();
+  }
+
+  function ensureVisibleThrough(index) {
+    if (!usesPagedList() || index < 0) return false;
+    if (index < visibleCount) return false;
+
+    const nextCount = Math.min(
+      filteredChannels.length,
+      Math.ceil((index + 1) / PAGE_SIZE) * PAGE_SIZE
+    );
+    if (nextCount <= visibleCount) return false;
+
+    const fromIndex = visibleCount;
+    visibleCount = nextCount;
+    appendChannelRange(fromIndex, visibleCount);
+    updateAllListStatus();
+    return true;
+  }
+
+  function loadMoreChannels() {
+    if (!usesPagedList() || loadingMore) return;
+    if (visibleCount >= filteredChannels.length) return;
+
+    loadingMore = true;
+    const fromIndex = visibleCount;
+    visibleCount = Math.min(
+      filteredChannels.length,
+      visibleCount + PAGE_SIZE
+    );
+    appendChannelRange(fromIndex, visibleCount);
+    loadingMore = false;
+    updateAllListStatus();
+  }
+
+  function maybeLoadMoreFromScroll() {
+    if (!usesPagedList() || loadingMore) return;
+    if (visibleCount >= filteredChannels.length) return;
+
+    const list = els.channelList;
+    const remaining = list.scrollHeight - list.scrollTop - list.clientHeight;
+    if (remaining <= 160) {
+      loadMoreChannels();
+    }
+  }
+
+  function renderChannels(options) {
+    const opts = options || {};
     updateModeTabs();
     updateHeaderCount();
 
     if (listMode === "favourites" && favouritesApi.count() === 0) {
       filteredChannels = [];
+      visibleCount = 0;
       updateNavButtons();
       renderEmptyFavourites();
       setStatus("Save channels with the heart icon");
@@ -300,12 +469,24 @@
     filteredChannels = computeFiltered();
     updateNavButtons();
 
-    els.channelList.innerHTML = "";
-
     if (!filteredChannels.length) {
+      visibleCount = 0;
       els.channelList.innerHTML =
         '<div class="empty">No channels found.</div>';
       return;
+    }
+
+    if (usesPagedList()) {
+      if (opts.resetPage || !visibleCount) {
+        visibleCount = Math.min(PAGE_SIZE, filteredChannels.length);
+      } else {
+        visibleCount = Math.min(
+          Math.max(visibleCount, PAGE_SIZE),
+          filteredChannels.length
+        );
+      }
+    } else {
+      visibleCount = filteredChannels.length;
     }
 
     if (listCursorIndex < 0 || listCursorIndex >= filteredChannels.length) {
@@ -313,59 +494,23 @@
       listCursorIndex = activeIndex >= 0 ? activeIndex : 0;
     }
 
-    const fragment = document.createDocumentFragment();
-
-    filteredChannels.forEach(function (channel, index) {
-      const item = document.createElement("div");
-      item.className =
-        "channel" +
-        (sameChannel(activeChannel, channel) ? " active" : "") +
-        (index === listCursorIndex ? " is-cursor" : "");
-      item.setAttribute("role", "option");
-      item.id = "channel-option-" + index;
-      item.setAttribute(
-        "aria-selected",
-        String(sameChannel(activeChannel, channel))
+    if (usesPagedList() && listCursorIndex >= visibleCount) {
+      visibleCount = Math.min(
+        filteredChannels.length,
+        Math.ceil((listCursorIndex + 1) / PAGE_SIZE) * PAGE_SIZE
       );
-      item.tabIndex = -1;
+    }
 
-      const logo = document.createElement("img");
-      logo.src = channel.logo || "";
-      logo.alt = "";
-      logo.loading = "lazy";
-      logo.onerror = function () {
-        logo.style.display = "none";
-      };
+    const limit = getRenderLimit();
+    els.channelList.innerHTML = "";
 
-      const info = document.createElement("div");
-      info.className = "channel-info";
-
-      const name = document.createElement("div");
-      name.className = "channel-name";
-      name.textContent = channel.name;
-
-      const meta = document.createElement("div");
-      meta.className = "channel-meta";
-      const countryName =
-        channel.countryInfo?.name || channel.countryName || "Unknown Country";
-      meta.textContent = countryName + " · " + channel.group;
-
-      info.appendChild(name);
-      info.appendChild(meta);
-
-      item.appendChild(logo);
-      item.appendChild(info);
-      item.appendChild(createHeartButton(channel));
-
-      item.addEventListener("click", function () {
-        listCursorIndex = index;
-        playChannel(channel);
-      });
-
-      fragment.appendChild(item);
-    });
-
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < limit; index += 1) {
+      fragment.appendChild(createChannelItem(filteredChannels[index], index));
+    }
     els.channelList.appendChild(fragment);
+    syncLoadMoreMarker();
+
     els.channelList.setAttribute(
       "aria-activedescendant",
       "channel-option-" + listCursorIndex
@@ -377,6 +522,8 @@
           " favourite" +
           (favouritesApi.count() === 1 ? "" : "s")
       );
+    } else {
+      updateAllListStatus();
     }
   }
 
@@ -389,7 +536,10 @@
     const playingIndex = filteredChannels.findIndex(function (item) {
       return sameChannel(item, channel);
     });
-    if (playingIndex >= 0) listCursorIndex = playingIndex;
+    if (playingIndex >= 0) {
+      listCursorIndex = playingIndex;
+      ensureVisibleThrough(playingIndex);
+    }
 
     els.channelTitle.textContent = channel.name;
     els.channelDetails.textContent =
@@ -421,11 +571,17 @@
 
     let index = getActiveIndex();
     if (index < 0) index = 0;
-    else {
+    else if (usesPagedList() && visibleCount < filteredChannels.length) {
+      index = Math.max(
+        0,
+        Math.min(filteredChannels.length - 1, index + offset)
+      );
+    } else {
       index =
         (index + offset + filteredChannels.length) % filteredChannels.length;
     }
 
+    ensureVisibleThrough(index);
     playChannel(filteredChannels[index]);
   }
 
@@ -496,12 +652,92 @@
     }, 1000);
   }
 
+  function toStoredChannel(channel) {
+    const code = channel.countryInfo?.code || channel.country || "";
+    return {
+      id: channel.id || "",
+      name: channel.name || "Unknown Channel",
+      logo: channel.logo || "",
+      group: channel.group || "Other",
+      country: channel.country || code,
+      url: channel.url || "",
+      countryName: channel.countryInfo?.name || channel.countryName || "",
+      countryCode: code
+    };
+  }
+
+  function hydrateChannel(stored) {
+    const code = String(stored.countryCode || stored.country || "").toUpperCase();
+    const name = stored.countryName || "";
+    return {
+      id: stored.id || "",
+      name: stored.name || "Unknown Channel",
+      logo: stored.logo || "",
+      group: stored.group || "Other",
+      country: stored.country || code,
+      url: stored.url || "",
+      countryName: name,
+      countryInfo: name || code ? { name: name || code, code: code } : null
+    };
+  }
+
+  function readStoredChannels() {
+    try {
+      const raw = localStorage.getItem(CHANNELS_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map(hydrateChannel).filter(function (channel) {
+        return channel.url;
+      });
+    } catch (error) {
+      console.warn("Could not read saved channels:", error);
+      return [];
+    }
+  }
+
+  function saveChannels(list) {
+    const payload = JSON.stringify(list.map(toStoredChannel));
+    try {
+      localStorage.setItem(CHANNELS_STORAGE_KEY, payload);
+      return true;
+    } catch (error) {
+      console.warn("Could not save channels:", error);
+      return false;
+    }
+  }
+
+  function restoreChannels() {
+    channels = readStoredChannels();
+    playlistLoaded = channels.length > 0;
+  }
+
+  function showSearchingState() {
+    setStatus("Searching...");
+    els.totalChannels.textContent = "Searching...";
+    const filtersHidden =
+      listMode === "favourites" && favouritesApi.count() === 0;
+    if (listMode === "all" || filtersHidden) {
+      filteredChannels = [];
+      updateNavButtons();
+      els.channelList.innerHTML = '<div class="empty">Searching...</div>';
+    }
+  }
+
+  function showPlaylistPrompt() {
+    filteredChannels = [];
+    updateNavButtons();
+    els.channelList.innerHTML =
+      '<div class="empty">Press refresh to load channels.</div>';
+    setStatus("Press refresh to load channels");
+  }
+
   async function loadPlaylist(options) {
     const opts = options || {};
     if (playlistLoading) return;
     playlistLoading = true;
 
-    setStatus("Loading playlist...");
+    showSearchingState();
     els.refreshBtn.disabled = true;
     els.listAllBtn.disabled = true;
 
@@ -529,19 +765,23 @@
       });
 
       playlistLoaded = true;
-      populateCategoriesFrom(channels);
+      populateCategoriesFrom(
+        listMode === "favourites" ? favouritesApi.list() : channels
+      );
 
       if (!opts.keepActive) {
         activeChannel = null;
       }
 
       if (listMode === "all") {
-        renderChannels();
+        renderChannels({ resetPage: true });
       } else {
         updateHeaderCount();
         updateModeTabs();
+        renderChannels({ resetPage: true });
       }
 
+      const saved = saveChannels(channels);
       const unknownCount = channels.filter(function (channel) {
         return !channel.countryInfo;
       }).length;
@@ -550,7 +790,8 @@
         "Loaded " +
           channels.length.toLocaleString() +
           " channels" +
-          (unknownCount ? " · " + unknownCount + " unknown country" : "")
+          (unknownCount ? " · " + unknownCount + " unknown country" : "") +
+          (saved ? "" : " · could not save locally")
       );
 
       if (listMode === "all") {
@@ -558,6 +799,18 @@
       }
     } catch (error) {
       console.error(error);
+      if (listMode === "all") {
+        if (playlistLoaded && channels.length) {
+          populateCategoriesFrom(channels);
+          renderChannels();
+        } else {
+          updateHeaderCount();
+          els.channelList.innerHTML =
+            '<div class="empty">Could not load channels. Press refresh to try again.</div>';
+        }
+      } else {
+        renderChannels();
+      }
       setStatus(
         "Error: " +
           error.message +
@@ -570,24 +823,28 @@
     }
   }
 
-  async function showAllChannels() {
+  function showAllChannels() {
     listMode = "all";
     updateModeTabs();
     updateHeaderCount();
 
-    if (!playlistLoaded) {
-      els.channelList.innerHTML =
-        '<div class="empty">Loading all channels…</div>';
-      await loadPlaylist({ keepActive: true });
-      if (listMode === "all") {
-        populateCategoriesFrom(channels);
-        renderChannels();
+    if (playlistLoading) {
+      showSearchingState();
+      return;
+    }
+
+    if (!playlistLoaded || !channels.length) {
+      if (!autoRefreshDone) {
+        autoRefreshDone = true;
+        loadPlaylist({ keepActive: true });
+        return;
       }
+      showPlaylistPrompt();
       return;
     }
 
     populateCategoriesFrom(channels);
-    renderChannels();
+    renderChannels({ resetPage: true });
   }
 
   function showFavourites() {
@@ -596,7 +853,7 @@
     if (countrySelect) countrySelect.setValue("", true);
     if (categorySelect) categorySelect.setValue("", true);
     populateCategoriesFrom(favouritesApi.list());
-    renderChannels();
+    renderChannels({ resetPage: true });
   }
 
   function initSelects() {
@@ -610,14 +867,14 @@
     countrySelect = new TomSelect(els.countryFilter, Object.assign({}, shared, {
       placeholder: "All Countries",
       onChange: function () {
-        renderChannels();
+        renderChannels({ resetPage: true });
       }
     }));
 
     categorySelect = new TomSelect(els.categoryFilter, Object.assign({}, shared, {
       placeholder: "All Categories",
       onChange: function () {
-        renderChannels();
+        renderChannels({ resetPage: true });
       }
     }));
   }
@@ -667,12 +924,18 @@
     if (listCursorIndex < 0) {
       const activeIndex = getActiveIndex();
       listCursorIndex = activeIndex >= 0 ? activeIndex : 0;
+    } else if (usesPagedList() && visibleCount < filteredChannels.length) {
+      listCursorIndex = Math.max(
+        0,
+        Math.min(filteredChannels.length - 1, listCursorIndex + delta)
+      );
     } else {
       listCursorIndex =
         (listCursorIndex + delta + filteredChannels.length) %
         filteredChannels.length;
     }
 
+    ensureVisibleThrough(listCursorIndex);
     updateListCursorUI();
   }
 
@@ -768,18 +1031,11 @@
   }
 
   function bindEvents() {
-    els.search.addEventListener("input", renderChannels);
+    els.search.addEventListener("input", function () {
+      renderChannels({ resetPage: true });
+    });
     els.refreshBtn.addEventListener("click", function () {
-      if (listMode === "all" || playlistLoaded) {
-        loadPlaylist({ keepActive: true }).then(function () {
-          if (listMode === "favourites") {
-            populateCategoriesFrom(favouritesApi.list());
-            renderChannels();
-          }
-        });
-      } else {
-        showAllChannels();
-      }
+      loadPlaylist({ keepActive: true });
     });
 
     els.listFavouritesBtn.addEventListener("click", showFavourites);
@@ -798,6 +1054,9 @@
     document.addEventListener("keydown", handleGlobalShortcut, true);
 
     els.channelList.addEventListener("keydown", handleListShortcut);
+    els.channelList.addEventListener("scroll", maybeLoadMoreFromScroll, {
+      passive: true
+    });
     els.channelList.addEventListener("click", function () {
       // Keep keyboard focus on the list after clicking a row (except fav button).
       if (!isFavouriteButton(document.activeElement)) {
@@ -859,6 +1118,7 @@
     bindEvents();
     updateNavButtons();
     setPlayerNavVisible(false);
+    restoreChannels();
     showFavourites();
     BaliPlex.player.focus();
 
