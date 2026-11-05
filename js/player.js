@@ -8,6 +8,23 @@ BaliPlex.player = (function () {
     return !!(player && player.currentSrc());
   }
 
+  function sourceTypeForUrl(url) {
+    const path = String(url || "")
+      .split(/[?#]/)[0]
+      .toLowerCase();
+
+    if (path.endsWith(".mpd")) {
+      return "application/dash+xml";
+    }
+
+    if (path.endsWith(".m3u8") || path.endsWith(".m3u")) {
+      return "application/x-mpegURL";
+    }
+
+    // Most IPTV sources are HLS even without a clear extension.
+    return "application/x-mpegURL";
+  }
+
   function init(videoElement, options) {
     onError = options && options.onError ? options.onError : null;
     const onPlaying = options && options.onPlaying;
@@ -29,6 +46,13 @@ BaliPlex.player = (function () {
       },
       controlBar: {
         pictureInPictureToggle: false
+      },
+      html5: {
+        vhs: {
+          overrideNative: true
+        },
+        nativeAudioTracks: false,
+        nativeVideoTracks: false
       }
     });
 
@@ -97,7 +121,7 @@ BaliPlex.player = (function () {
 
     player.src({
       src: url,
-      type: "application/x-mpegURL"
+      type: sourceTypeForUrl(url)
     });
 
     const playPromise = player.play();
@@ -161,6 +185,7 @@ BaliPlex.player = (function () {
     hasSource,
     adjustVolume,
     focus,
-    onFullscreenChange
+    onFullscreenChange,
+    sourceTypeForUrl
   };
 })();

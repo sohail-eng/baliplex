@@ -18,10 +18,12 @@
   let visibleCount = 0;
   let loadingMore = false;
   let playbackErrorTimer = null;
+  let playbackStallTimer = null;
   let playbackGeneration = 0;
 
   const PAGE_SIZE = 20;
-  const PLAYBACK_ERROR_SKIP_MS = 5000;
+  const MEDIA_ERROR_SKIP_MS = 5000;
+  const PLAYLIST_STALL_SKIP_MS = 10000;
 
   const HEART_OUTLINE =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
@@ -555,8 +557,19 @@
     }
   }
 
-  function scheduleSkipAfterPlaybackError(message) {
-    const generation = playbackGeneration;
+  function clearPlaybackStallSkip() {
+    if (playbackStallTimer) {
+      clearTimeout(playbackStallTimer);
+      playbackStallTimer = null;
+    }
+  }
+
+  function clearPlaybackSkipTimers() {
+    clearPlaybackErrorSkip();
+    clearPlaybackStallSkip();
+  }
+
+  function scheduleChannelSkip(message, delayMs, generation) {
     clearPlaybackErrorSkip();
 
     if (generation !== playbackGeneration) return;
@@ -566,20 +579,48 @@
       return;
     }
 
+    const seconds = Math.round(delayMs / 1000);
     els.channelDetails.textContent =
-      message + " Trying next channel in 5s…";
+      message + " Trying next channel in " + seconds + "s…";
 
     playbackErrorTimer = setTimeout(function () {
       playbackErrorTimer = null;
       // User already changed channel — never skip away from a working one.
       if (generation !== playbackGeneration) return;
       playRelative(1);
-    }, PLAYBACK_ERROR_SKIP_MS);
+    }, delayMs);
+  }
+
+  function scheduleSkipAfterPlaybackError(message) {
+    // Hard media errors should move on faster.
+    clearPlaybackStallSkip();
+    scheduleChannelSkip(message, MEDIA_ERROR_SKIP_MS, playbackGeneration);
+  }
+
+  function armPlaylistStallWatchdog(generation) {
+    clearPlaybackStallSkip();
+
+    // Covers DASH/HLS playlist retry loops that warn but never hard-error.
+    playbackStallTimer = setTimeout(function () {
+      playbackStallTimer = null;
+      if (generation !== playbackGeneration) return;
+
+      if (filteredChannels.length < 2) {
+        els.channelDetails.textContent =
+          "Stream is not responding. The playlist may be unavailable.";
+        return;
+      }
+
+      els.channelDetails.textContent =
+        "Stream is not responding. Trying next channel…";
+      playRelative(1);
+    }, PLAYLIST_STALL_SKIP_MS);
   }
 
   function playChannel(channel) {
-    clearPlaybackErrorSkip();
+    clearPlaybackSkipTimers();
     playbackGeneration += 1;
+    const generation = playbackGeneration;
 
     const keepListFocus =
       isInChannelList(document.activeElement) ||
@@ -608,6 +649,7 @@
     setPlayerNavVisible(true);
 
     BaliPlex.player.play(channel.url);
+    armPlaylistStallWatchdog(generation);
     updateChannelSelectionUI();
     scrollActiveIntoView();
 
@@ -1136,7 +1178,7 @@
   function boot() {
     BaliPlex.player.init(document.getElementById("videoPlayer"), {
       onError: scheduleSkipAfterPlaybackError,
-      onPlaying: clearPlaybackErrorSkip,
+      onPlaying: clearPlaybackSkipTimers,
       onPlayRequest: playFirstAvailable,
       onUserActive: function () {
         if (window.matchMedia("(min-width: 901px)").matches) {
