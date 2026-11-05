@@ -1,7 +1,13 @@
 (function () {
-  const { PLAYLIST_URL, COUNTRIES_URL, CHANNELS_STORAGE_KEY } = BaliPlex.config;
+  const {
+    PLAYLIST_URL,
+    COUNTRIES_URL,
+    CHANNELS_STORAGE_KEY,
+    BLOCK_WHEN_DEVTOOLS_OPEN
+  } = BaliPlex.config;
   const { parseM3U, identifyCountry } = BaliPlex.parser;
   const favouritesApi = BaliPlex.favourites;
+  const devtoolsApi = BaliPlex.devtools;
 
   let channels = [];
   let countries = [];
@@ -55,7 +61,8 @@
     filtersPanel: document.getElementById("filtersPanel"),
     volumeHud: document.getElementById("volumeHud"),
     volumeHudValue: document.getElementById("volumeHudValue"),
-    volumeTubeSteps: document.getElementById("volumeTubeSteps")
+    volumeTubeSteps: document.getElementById("volumeTubeSteps"),
+    devtoolsGuard: document.getElementById("devtoolsGuard")
   };
 
   const VOLUME_STEP = 0.05;
@@ -132,7 +139,38 @@
     return favouritesApi.channelKey(a) === favouritesApi.channelKey(b);
   }
 
+  function isDevtoolsBlocked() {
+    return !!(
+      BLOCK_WHEN_DEVTOOLS_OPEN &&
+      devtoolsApi &&
+      typeof devtoolsApi.isOpen === "function" &&
+      devtoolsApi.isOpen()
+    );
+  }
+
+  function setDevtoolsBlocked(blocked) {
+    document.body.classList.toggle("devtools-blocked", blocked);
+    if (els.devtoolsGuard) {
+      els.devtoolsGuard.hidden = !blocked;
+    }
+
+    if (blocked) {
+      stopStreaming();
+    }
+  }
+
+  function initDevtoolsGuard() {
+    if (!BLOCK_WHEN_DEVTOOLS_OPEN || !devtoolsApi) return;
+
+    devtoolsApi.onChange(setDevtoolsBlocked);
+    devtoolsApi.start();
+  }
+
   async function loadMetadata() {
+    if (isDevtoolsBlocked()) {
+      throw new Error("Close DevTools to continue.");
+    }
+
     const response = await fetch(COUNTRIES_URL);
     if (!response.ok) {
       throw new Error("Could not load country metadata.");
@@ -656,6 +694,7 @@
   }
 
   function startStreaming() {
+    if (isDevtoolsBlocked()) return;
     if (!activeChannel) return;
     playChannel(activeChannel);
   }
@@ -672,6 +711,11 @@
   }
 
   function playChannel(channel) {
+    if (isDevtoolsBlocked()) {
+      setDevtoolsBlocked(true);
+      return;
+    }
+
     clearPlaybackSkipTimers();
     playbackGeneration += 1;
     const generation = playbackGeneration;
@@ -884,6 +928,13 @@
   async function loadPlaylist(options) {
     const opts = options || {};
     if (playlistLoading) return;
+
+    if (isDevtoolsBlocked()) {
+      setDevtoolsBlocked(true);
+      setStatus("Close DevTools to load channels");
+      return;
+    }
+
     playlistLoading = true;
 
     showSearchingState();
@@ -891,6 +942,10 @@
     els.listAllBtn.disabled = true;
 
     try {
+      if (isDevtoolsBlocked()) {
+        throw new Error("Close DevTools to continue.");
+      }
+
       const results = await Promise.all([
         fetch(PLAYLIST_URL),
         countries.length ? Promise.resolve(null) : loadMetadata()
@@ -1272,15 +1327,19 @@
     setPlayerNavVisible(false);
     restoreChannels();
     showFavourites();
+    setPlaybackToggleState("start");
+    initDevtoolsGuard();
     BaliPlex.player.focus();
 
     // Warm country metadata in the background so filters are ready
     // when the user opens all channels.
-    loadMetadata()
-      .then(populateCountries)
-      .catch(function (error) {
-        console.warn(error);
-      });
+    if (!isDevtoolsBlocked()) {
+      loadMetadata()
+        .then(populateCountries)
+        .catch(function (error) {
+          console.warn(error);
+        });
+    }
   }
 
   if (document.readyState === "loading") {

@@ -45,6 +45,50 @@ select {
   color: inherit;
 }
 
+.devtools-guard {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+.devtools-guard[hidden] {
+  display: none;
+}
+
+.devtools-guard-card {
+  max-width: 420px;
+  padding: 28px 24px;
+  border: 1px solid var(--bp-border);
+  border-radius: 8px;
+  background: var(--bp-panel);
+  text-align: center;
+}
+
+.devtools-guard-card h2 {
+  margin: 0 0 10px;
+  font-family: var(--bp-font-display);
+  font-size: 2rem;
+  letter-spacing: 0.04em;
+  color: var(--bp-accent);
+  font-weight: 400;
+}
+
+.devtools-guard-card p {
+  margin: 0;
+  color: var(--bp-muted);
+  line-height: 1.5;
+}
+
+body.devtools-blocked {
+  overflow: hidden;
+}
+
 /* Header */
 
 .site-header {

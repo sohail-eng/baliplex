@@ -38,6 +38,24 @@
     </div>
   </header>
 
+  <div
+    id="devtoolsGuard"
+    class="devtools-guard"
+    hidden
+    role="alertdialog"
+    aria-modal="true"
+    aria-labelledby="devtoolsGuardTitle"
+    aria-describedby="devtoolsGuardCopy"
+  >
+    <div class="devtools-guard-card">
+      <h2 id="devtoolsGuardTitle">Please close DevTools</h2>
+      <p id="devtoolsGuardCopy">
+        Streaming and network requests are paused while browser developer tools
+        are open. Close DevTools to continue watching.
+      </p>
+    </div>
+  </div>
+
   <div class="app">
     <aside class="sidebar">
       <div class="sidebar-toolbar">
@@ -193,6 +211,7 @@
   <script src="./js/parser.js"></script>
   <script src="./js/favourites.js"></script>
   <script src="./js/player.js"></script>
+  <script src="./js/devtools-guard.js"></script>
   <script src="./js/app.js"></script>
 </body>
 </html>
