@@ -346,7 +346,6 @@
     const logo = document.createElement("img");
     logo.src = channel.logo;
     logo.alt = "";
-    logo.loading = "lazy";
     logo.decoding = "async";
     logo.onerror = function () {
       wrap.classList.add("is-fallback");
@@ -354,6 +353,25 @@
     };
     wrap.appendChild(logo);
     return wrap;
+  }
+
+  function updateChannelSelectionUI() {
+    const items = els.channelList.querySelectorAll(".channel");
+    items.forEach(function (item, index) {
+      const channel = filteredChannels[index];
+      const isActive = sameChannel(activeChannel, channel);
+      const isCursor = index === listCursorIndex;
+      item.classList.toggle("active", isActive);
+      item.classList.toggle("is-cursor", isCursor);
+      item.setAttribute("aria-selected", String(isActive));
+    });
+
+    if (listCursorIndex >= 0) {
+      els.channelList.setAttribute(
+        "aria-activedescendant",
+        "channel-option-" + listCursorIndex
+      );
+    }
   }
 
   function createChannelItem(channel, index) {
@@ -555,12 +573,11 @@
     setPlayerNavVisible(true);
 
     BaliPlex.player.play(channel.url);
-    renderChannels();
+    updateChannelSelectionUI();
     scrollActiveIntoView();
 
     if (keepListFocus) {
       els.channelList.focus({ preventScroll: true });
-      updateListCursorUI();
     } else if (window.matchMedia("(max-width: 900px)").matches) {
       els.playerStage.scrollIntoView({ behavior: "smooth", block: "start" });
     }
