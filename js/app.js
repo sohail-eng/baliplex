@@ -7,6 +7,7 @@
   } = BaliPlex.config;
   const { parseM3U, identifyCountry } = BaliPlex.parser;
   const favouritesApi = BaliPlex.favourites;
+  const shareApi = BaliPlex.share;
   const devtoolsApi = BaliPlex.devtools;
 
   let channels = [];
@@ -14,6 +15,7 @@
   let countryMap = new Map();
   let filteredChannels = [];
   let activeChannel = null;
+  let sharedChannel = null;
   let countrySelect = null;
   let categorySelect = null;
   let listMode = "favourites";
@@ -26,6 +28,7 @@
   let playbackErrorTimer = null;
   let playbackStallTimer = null;
   let playbackGeneration = 0;
+  let shareFeedbackTimer = null;
 
   const PAGE_SIZE = 20;
   const MEDIA_ERROR_SKIP_MS = 5000;
@@ -52,6 +55,7 @@
     refreshBtn: document.getElementById("refreshBtn"),
     playbackToggle: document.getElementById("playbackToggle"),
     playbackToggleLabel: document.getElementById("playbackToggleLabel"),
+    shareChannel: document.getElementById("shareChannel"),
     prevBtn: document.getElementById("prevChannel"),
     nextBtn: document.getElementById("nextChannel"),
     playerStage: document.getElementById("playerStage"),
@@ -237,9 +241,20 @@
     return { search, selectedCountry, selectedCategory };
   }
 
+  function getFavouritesWithShared() {
+    const favs = favouritesApi.list();
+    if (!sharedChannel) return favs;
+
+    const sharedKey = favouritesApi.channelKey(sharedChannel);
+    const rest = favs.filter(function (channel) {
+      return favouritesApi.channelKey(channel) !== sharedKey;
+    });
+    return [sharedChannel].concat(rest);
+  }
+
   function getSourceChannels() {
     if (listMode === "favourites") {
-      return favouritesApi.list();
+      return getFavouritesWithShared();
     }
     return channels;
   }
@@ -317,7 +332,7 @@
       updateHeaderCount();
 
       if (listMode === "favourites") {
-        populateCategoriesFrom(favouritesApi.list());
+        populateCategoriesFrom(getFavouritesWithShared());
         renderChannels();
       } else {
         const nowFav = favouritesApi.isFavourite(channel);
@@ -520,7 +535,7 @@
     updateModeTabs();
     updateHeaderCount();
 
-    if (listMode === "favourites" && favouritesApi.count() === 0) {
+    if (listMode === "favourites" && favouritesApi.count() === 0 && !sharedChannel) {
       filteredChannels = [];
       visibleCount = 0;
       updateNavButtons();
@@ -668,6 +683,10 @@
     els.playbackToggle.title = title;
     els.playbackToggle.setAttribute("aria-label", title);
     els.playbackToggle.disabled = !activeChannel;
+
+    if (els.shareChannel) {
+      els.shareChannel.disabled = !activeChannel;
+    }
 
     if (els.playbackToggleLabel) {
       els.playbackToggleLabel.textContent = label;
@@ -970,7 +989,7 @@
 
       playlistLoaded = true;
       populateCategoriesFrom(
-        listMode === "favourites" ? favouritesApi.list() : channels
+        listMode === "favourites" ? getFavouritesWithShared() : channels
       );
 
       if (!opts.keepActive) {
@@ -1056,8 +1075,65 @@
     els.search.value = "";
     if (countrySelect) countrySelect.setValue("", true);
     if (categorySelect) categorySelect.setValue("", true);
-    populateCategoriesFrom(favouritesApi.list());
+    populateCategoriesFrom(getFavouritesWithShared());
     renderChannels({ resetPage: true });
+  }
+
+  function resetShareButtonLabel() {
+    if (!els.shareChannel) return;
+    els.shareChannel.classList.remove("is-copied");
+    els.shareChannel.title = "Share this channel";
+    els.shareChannel.setAttribute("aria-label", "Share this channel");
+    const label = els.shareChannel.querySelector("span");
+    if (label) label.textContent = "Share";
+  }
+
+  function showShareCopied() {
+    if (!els.shareChannel) return;
+    els.shareChannel.classList.add("is-copied");
+    els.shareChannel.title = "Link copied";
+    els.shareChannel.setAttribute("aria-label", "Link copied");
+    const label = els.shareChannel.querySelector("span");
+    if (label) label.textContent = "Copied";
+
+    if (shareFeedbackTimer) clearTimeout(shareFeedbackTimer);
+    shareFeedbackTimer = setTimeout(resetShareButtonLabel, 1800);
+  }
+
+  async function shareActiveChannel() {
+    if (!activeChannel || !shareApi) return;
+
+    const url = shareApi.buildUrl(activeChannel);
+    if (!url) {
+      setStatus("Could not build a share link for this channel");
+      return;
+    }
+
+    const title = activeChannel.name || "BaliPlex channel";
+    const text = "Watch " + title + " on BaliPlex";
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: title, text: text, url: url });
+        setStatus("Shared " + title);
+        return;
+      }
+    } catch (error) {
+      if (error && error.name === "AbortError") return;
+    }
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+        showShareCopied();
+        setStatus("Share link copied");
+        return;
+      }
+    } catch (error) {
+      console.warn("Clipboard share failed:", error);
+    }
+
+    window.prompt("Copy this share link:", url);
   }
 
   function initSelects() {
@@ -1251,6 +1327,12 @@
       els.playbackToggle.addEventListener("click", togglePlayback);
     }
 
+    if (els.shareChannel) {
+      els.shareChannel.addEventListener("click", function () {
+        shareActiveChannel();
+      });
+    }
+
     els.prevBtn.addEventListener("click", function () {
       playRelative(-1);
     });
@@ -1326,10 +1408,22 @@
     updateNavButtons();
     setPlayerNavVisible(false);
     restoreChannels();
+
+    if (shareApi && typeof shareApi.readFromLocation === "function") {
+      sharedChannel = shareApi.readFromLocation();
+    }
+
     showFavourites();
     setPlaybackToggleState("start");
     initDevtoolsGuard();
     BaliPlex.player.focus();
+
+    if (sharedChannel) {
+      playChannel(sharedChannel);
+      setStatus(
+        "Opened shared channel · tap the heart to save it to favourites"
+      );
+    }
 
     // Warm country metadata in the background so filters are ready
     // when the user opens all channels.

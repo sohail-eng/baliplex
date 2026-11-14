@@ -6,6 +6,7 @@ BaliPlex.config = {
   APP_NAME: "BaliPlex",
   FAVOURITES_STORAGE_KEY: "baliplex.favourites.v1",
   CHANNELS_STORAGE_KEY: "baliplex.channels.v1",
+  SHARE_KEY: "baliplex-share-v1",
   // Best-effort only; browser DevTools cannot be fully blocked.
   BLOCK_WHEN_DEVTOOLS_OPEN: true
 };
