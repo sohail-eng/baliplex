@@ -113,23 +113,56 @@ BaliPlex.player = (function () {
     player.el().appendChild(element);
   }
 
-  function play(url) {
+  function attemptPlay(preferAutoplay) {
+    const playPromise = player.play();
+    if (!playPromise || typeof playPromise.then !== "function") return;
+
+    playPromise.catch(function () {
+      if (!preferAutoplay) return;
+
+      // Browsers often block unmuted autoplay on a fresh page load.
+      // Start muted so playback begins, then restore sound if allowed.
+      player.muted(true);
+      return player.play().then(function () {
+        player.one("playing", function () {
+          try {
+            player.muted(false);
+          } catch (error) {
+            /* Keep muted if the browser refuses unmuted playback. */
+          }
+        });
+      });
+    }).catch(function () {
+      /* Autoplay still blocked until the user presses play. */
+    });
+  }
+
+  function play(url, options) {
     if (!player || !url) return;
 
-    player.pause();
-    player.error(null);
+    const opts = options || {};
+    const preferAutoplay = !!opts.preferAutoplay;
 
-    player.src({
-      src: url,
-      type: sourceTypeForUrl(url)
-    });
+    player.ready(function () {
+      player.pause();
+      player.error(null);
 
-    const playPromise = player.play();
-    if (playPromise && typeof playPromise.catch === "function") {
-      playPromise.catch(function () {
-        /* Autoplay may be blocked until user interaction. */
+      if (!preferAutoplay) {
+        player.muted(false);
+      }
+
+      player.src({
+        src: url,
+        type: sourceTypeForUrl(url)
       });
-    }
+
+      attemptPlay(preferAutoplay);
+    });
+  }
+
+  function whenReady(callback) {
+    if (!player || typeof callback !== "function") return;
+    player.ready(callback);
   }
 
   function stop() {
@@ -185,6 +218,7 @@ BaliPlex.player = (function () {
     hasSource,
     adjustVolume,
     focus,
+    whenReady,
     onFullscreenChange,
     sourceTypeForUrl
   };

@@ -729,11 +729,13 @@
     startStreaming();
   }
 
-  function playChannel(channel) {
+  function playChannel(channel, options) {
     if (isDevtoolsBlocked()) {
       setDevtoolsBlocked(true);
       return;
     }
+
+    const opts = options || {};
 
     clearPlaybackSkipTimers();
     playbackGeneration += 1;
@@ -766,7 +768,9 @@
     setPlayerNavVisible(true);
     setPlaybackToggleState("stop");
 
-    BaliPlex.player.play(channel.url);
+    BaliPlex.player.play(channel.url, {
+      preferAutoplay: !!opts.preferAutoplay
+    });
     armPlaylistStallWatchdog(generation);
     updateChannelSelectionUI();
     scrollActiveIntoView();
@@ -1419,10 +1423,12 @@
     BaliPlex.player.focus();
 
     if (sharedChannel) {
-      playChannel(sharedChannel);
-      setStatus(
-        "Opened shared channel · tap the heart to save it to favourites"
-      );
+      BaliPlex.player.whenReady(function () {
+        playChannel(sharedChannel, { preferAutoplay: true });
+        setStatus(
+          "Opened shared channel · tap the heart to save it to favourites"
+        );
+      });
     }
 
     // Warm country metadata in the background so filters are ready
