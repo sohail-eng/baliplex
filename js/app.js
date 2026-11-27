@@ -62,11 +62,20 @@
     playerShell: document.querySelector(".player-shell"),
     listFavouritesBtn: document.getElementById("listFavouritesBtn"),
     listAllBtn: document.getElementById("listAllBtn"),
+    shareFavouritesBtn: document.getElementById("shareFavouritesBtn"),
     filtersPanel: document.getElementById("filtersPanel"),
     volumeHud: document.getElementById("volumeHud"),
     volumeHudValue: document.getElementById("volumeHudValue"),
     volumeTubeSteps: document.getElementById("volumeTubeSteps"),
-    devtoolsGuard: document.getElementById("devtoolsGuard")
+    devtoolsGuard: document.getElementById("devtoolsGuard"),
+    sharedFavouritesModal: document.getElementById("sharedFavouritesModal"),
+    sharedFavouritesClose: document.getElementById("sharedFavouritesClose"),
+    sharedFavouritesLoading: document.getElementById("sharedFavouritesLoading"),
+    sharedFavouritesLoadingText: document.getElementById(
+      "sharedFavouritesLoadingText"
+    ),
+    sharedFavouritesList: document.getElementById("sharedFavouritesList"),
+    sharedFavouritesEmpty: document.getElementById("sharedFavouritesEmpty")
   };
 
   const VOLUME_STEP = 0.05;
@@ -100,6 +109,11 @@
     els.listAllBtn.setAttribute("aria-pressed", String(listMode === "all"));
     els.listFavouritesBtn.textContent =
       favCount > 0 ? "Favourites (" + favCount + ")" : "Favourites";
+
+    if (els.shareFavouritesBtn) {
+      els.shareFavouritesBtn.hidden = favCount === 0;
+      els.shareFavouritesBtn.disabled = favCount === 0;
+    }
 
     document.body.classList.toggle("mode-favourites", listMode === "favourites");
     document.body.classList.toggle("mode-all", listMode === "all");
@@ -310,18 +324,24 @@
     els.channelList.appendChild(empty);
   }
 
-  function createHeartButton(channel) {
+  function syncHeartButton(button, channel) {
     const fav = favouritesApi.isFavourite(channel);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "fav-btn" + (fav ? " is-active" : "");
+    button.classList.toggle("is-active", fav);
+    button.setAttribute("aria-pressed", String(fav));
     button.title = fav ? "Remove from favourites" : "Add to favourites";
     button.setAttribute(
       "aria-label",
       fav ? "Remove from favourites" : "Add to favourites"
     );
-    button.setAttribute("aria-pressed", String(fav));
     button.innerHTML = fav ? HEART_FILLED : HEART_OUTLINE;
+  }
+
+  function createHeartButton(channel, options) {
+    const opts = options || {};
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "fav-btn";
+    syncHeartButton(button, channel);
 
     button.addEventListener("click", function (event) {
       event.preventDefault();
@@ -330,23 +350,15 @@
       favouritesApi.toggle(channel);
       updateModeTabs();
       updateHeaderCount();
+      syncHeartButton(button, channel);
 
       if (listMode === "favourites") {
         populateCategoriesFrom(getFavouritesWithShared());
         renderChannels();
-      } else {
-        const nowFav = favouritesApi.isFavourite(channel);
-        button.classList.toggle("is-active", nowFav);
-        button.setAttribute("aria-pressed", String(nowFav));
-        button.title = nowFav
-          ? "Remove from favourites"
-          : "Add to favourites";
-        button.setAttribute(
-          "aria-label",
-          nowFav ? "Remove from favourites" : "Add to favourites"
-        );
-        button.innerHTML = nowFav ? HEART_FILLED : HEART_OUTLINE;
-        updateModeTabs();
+      }
+
+      if (typeof opts.onToggle === "function") {
+        opts.onToggle(favouritesApi.isFavourite(channel));
       }
     });
 
@@ -950,17 +962,29 @@
 
   async function loadPlaylist(options) {
     const opts = options || {};
-    if (playlistLoading) return;
+    if (playlistLoading) {
+      if (opts.waitIfBusy) {
+        while (playlistLoading) {
+          await new Promise(function (resolve) {
+            setTimeout(resolve, 120);
+          });
+        }
+        return playlistLoaded && channels.length > 0;
+      }
+      return false;
+    }
 
     if (isDevtoolsBlocked()) {
       setDevtoolsBlocked(true);
       setStatus("Close DevTools to load channels");
-      return;
+      return false;
     }
 
     playlistLoading = true;
 
-    showSearchingState();
+    if (!opts.silent) {
+      showSearchingState();
+    }
     els.refreshBtn.disabled = true;
     els.listAllBtn.disabled = true;
 
@@ -1000,12 +1024,17 @@
         activeChannel = null;
       }
 
-      if (listMode === "all") {
-        renderChannels({ resetPage: true });
+      if (!opts.silent) {
+        if (listMode === "all") {
+          renderChannels({ resetPage: true });
+        } else {
+          updateHeaderCount();
+          updateModeTabs();
+          renderChannels({ resetPage: true });
+        }
       } else {
         updateHeaderCount();
         updateModeTabs();
-        renderChannels({ resetPage: true });
       }
 
       const saved = saveChannels(channels);
@@ -1021,28 +1050,33 @@
           (saved ? "" : " · could not save locally")
       );
 
-      if (listMode === "all") {
+      if (listMode === "all" && !opts.silent) {
         updateHeaderCount();
       }
+
+      return true;
     } catch (error) {
       console.error(error);
-      if (listMode === "all") {
-        if (playlistLoaded && channels.length) {
-          populateCategoriesFrom(channels);
-          renderChannels();
+      if (!opts.silent) {
+        if (listMode === "all") {
+          if (playlistLoaded && channels.length) {
+            populateCategoriesFrom(channels);
+            renderChannels();
+          } else {
+            updateHeaderCount();
+            els.channelList.innerHTML =
+              '<div class="empty">Could not load channels. Press refresh to try again.</div>';
+          }
         } else {
-          updateHeaderCount();
-          els.channelList.innerHTML =
-            '<div class="empty">Could not load channels. Press refresh to try again.</div>';
+          renderChannels();
         }
-      } else {
-        renderChannels();
       }
       setStatus(
         "Error: " +
           error.message +
           " (Check playlist access / CORS.)"
       );
+      return false;
     } finally {
       playlistLoading = false;
       els.refreshBtn.disabled = false;
@@ -1104,6 +1138,29 @@
     shareFeedbackTimer = setTimeout(resetShareButtonLabel, 1800);
   }
 
+  async function copyOrShareLink(url, title, text) {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: title, text: text, url: url });
+        return "shared";
+      }
+    } catch (error) {
+      if (error && error.name === "AbortError") return "aborted";
+    }
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+        return "copied";
+      }
+    } catch (error) {
+      console.warn("Clipboard share failed:", error);
+    }
+
+    window.prompt("Copy this share link:", url);
+    return "prompted";
+  }
+
   async function shareActiveChannel() {
     if (!activeChannel || !shareApi) return;
 
@@ -1115,29 +1172,169 @@
 
     const title = activeChannel.name || "BaliPlex channel";
     const text = "Watch " + title + " on BaliPlex";
+    const result = await copyOrShareLink(url, title, text);
 
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: title, text: text, url: url });
-        setStatus("Shared " + title);
-        return;
-      }
-    } catch (error) {
-      if (error && error.name === "AbortError") return;
+    if (result === "shared") {
+      setStatus("Shared " + title);
+    } else if (result === "copied") {
+      showShareCopied();
+      setStatus("Share link copied");
+    } else if (result === "prompted") {
+      setStatus("Copy the share link to send this channel");
+    }
+  }
+
+  async function shareFavouritesList() {
+    if (!shareApi) return;
+
+    const favs = favouritesApi.list();
+    if (!favs.length) {
+      setStatus("Add favourites before sharing");
+      return;
     }
 
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(url);
-        showShareCopied();
-        setStatus("Share link copied");
-        return;
-      }
-    } catch (error) {
-      console.warn("Clipboard share failed:", error);
+    const url = shareApi.buildFavouritesUrl(favs);
+    if (!url) {
+      setStatus("Could not build a favourites share link");
+      return;
     }
 
-    window.prompt("Copy this share link:", url);
+    const title = "BaliPlex favourites";
+    const text =
+      "Shared favourites playlist (" + favs.length + " channels) on BaliPlex";
+    const result = await copyOrShareLink(url, title, text);
+
+    if (result === "shared") {
+      setStatus("Shared " + favs.length + " favourites");
+    } else if (result === "copied" || result === "prompted") {
+      setStatus("Favourites share link ready");
+    }
+  }
+
+  function setSharedFavouritesModalOpen(open) {
+    if (!els.sharedFavouritesModal) return;
+    els.sharedFavouritesModal.hidden = !open;
+    document.body.classList.toggle("share-modal-open", open);
+  }
+
+  function closeSharedFavouritesModal() {
+    setSharedFavouritesModalOpen(false);
+    if (els.sharedFavouritesList) els.sharedFavouritesList.innerHTML = "";
+    if (shareApi && typeof shareApi.clearFavouritesFromLocation === "function") {
+      shareApi.clearFavouritesFromLocation();
+    }
+  }
+
+  function showSharedFavouritesLoading(message) {
+    if (els.sharedFavouritesLoadingText) {
+      els.sharedFavouritesLoadingText.textContent =
+        message || "Loading playlist…";
+    }
+    if (els.sharedFavouritesLoading) els.sharedFavouritesLoading.hidden = false;
+    if (els.sharedFavouritesList) {
+      els.sharedFavouritesList.hidden = true;
+      els.sharedFavouritesList.innerHTML = "";
+    }
+    if (els.sharedFavouritesEmpty) {
+      els.sharedFavouritesEmpty.hidden = true;
+      els.sharedFavouritesEmpty.textContent = "";
+    }
+  }
+
+  function createSharedFavouriteItem(channel) {
+    const item = document.createElement("div");
+    item.className = "share-modal-item";
+
+    const info = document.createElement("div");
+    info.className = "channel-info";
+
+    const name = document.createElement("div");
+    name.className = "channel-name";
+    name.textContent = channel.name;
+
+    const meta = document.createElement("div");
+    meta.className = "channel-meta";
+    meta.textContent =
+      (channel.countryInfo?.name ||
+        channel.countryName ||
+        channel.country ||
+        "Unknown") +
+      " · " +
+      (channel.group || "Other");
+
+    info.appendChild(name);
+    info.appendChild(meta);
+
+    item.appendChild(createChannelLogo(channel));
+    item.appendChild(info);
+    item.appendChild(createHeartButton(channel));
+    return item;
+  }
+
+  function renderSharedFavouritesList(resolved, requestedCount) {
+    if (!els.sharedFavouritesList || !els.sharedFavouritesEmpty) return;
+
+    if (els.sharedFavouritesLoading) els.sharedFavouritesLoading.hidden = true;
+
+    if (!resolved.length) {
+      els.sharedFavouritesList.hidden = true;
+      els.sharedFavouritesList.innerHTML = "";
+      els.sharedFavouritesEmpty.hidden = false;
+      els.sharedFavouritesEmpty.textContent =
+        requestedCount > 0
+          ? "None of the shared channels could be found in the playlist."
+          : "This favourites share link is empty or invalid.";
+      return;
+    }
+
+    els.sharedFavouritesEmpty.hidden = true;
+    els.sharedFavouritesList.hidden = false;
+    els.sharedFavouritesList.innerHTML = "";
+
+    const fragment = document.createDocumentFragment();
+    resolved.forEach(function (channel) {
+      fragment.appendChild(createSharedFavouriteItem(channel));
+    });
+    els.sharedFavouritesList.appendChild(fragment);
+
+    const missing = Math.max(0, requestedCount - resolved.length);
+    setStatus(
+      "Shared favourites ready · " +
+        resolved.length.toLocaleString() +
+        " channel" +
+        (resolved.length === 1 ? "" : "s") +
+        (missing ? " · " + missing + " not found" : "") +
+        " · heart the ones you want"
+    );
+  }
+
+  async function openSharedFavouritesFromRefs(refs) {
+    if (!els.sharedFavouritesModal) return;
+
+    setSharedFavouritesModalOpen(true);
+    showSharedFavouritesLoading("Loading playlist to prepare shared channels…");
+
+    // Always refresh so shared ids resolve against the current playlist.
+    const loaded = await loadPlaylist({
+      keepActive: true,
+      silent: true,
+      waitIfBusy: true
+    });
+
+    if (!loaded || !channels.length) {
+      if (els.sharedFavouritesLoading) els.sharedFavouritesLoading.hidden = true;
+      if (els.sharedFavouritesEmpty) {
+        els.sharedFavouritesEmpty.hidden = false;
+        els.sharedFavouritesEmpty.textContent =
+          "Could not load the playlist. Close this window and try again.";
+      }
+      return;
+    }
+
+    showSharedFavouritesLoading("Preparing shared channels…");
+
+    const resolved = shareApi.resolveFavourites(refs, channels);
+    renderSharedFavouritesList(resolved, refs.length);
   }
 
   function initSelects() {
@@ -1337,6 +1534,30 @@
       });
     }
 
+    if (els.shareFavouritesBtn) {
+      els.shareFavouritesBtn.addEventListener("click", function () {
+        shareFavouritesList();
+      });
+    }
+
+    if (els.sharedFavouritesClose) {
+      els.sharedFavouritesClose.addEventListener("click", closeSharedFavouritesModal);
+    }
+
+    if (els.sharedFavouritesModal) {
+      els.sharedFavouritesModal.addEventListener("click", function (event) {
+        if (event.target === els.sharedFavouritesModal) {
+          closeSharedFavouritesModal();
+        }
+      });
+    }
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape") return;
+      if (!els.sharedFavouritesModal || els.sharedFavouritesModal.hidden) return;
+      closeSharedFavouritesModal();
+    });
+
     els.prevBtn.addEventListener("click", function () {
       playRelative(-1);
     });
@@ -1413,7 +1634,16 @@
     setPlayerNavVisible(false);
     restoreChannels();
 
-    if (shareApi && typeof shareApi.readFromLocation === "function") {
+    let sharedFavouriteRefs = [];
+    if (shareApi && typeof shareApi.readFavouritesFromLocation === "function") {
+      sharedFavouriteRefs = shareApi.readFavouritesFromLocation();
+    }
+
+    if (
+      (!sharedFavouriteRefs || !sharedFavouriteRefs.length) &&
+      shareApi &&
+      typeof shareApi.readFromLocation === "function"
+    ) {
       sharedChannel = shareApi.readFromLocation();
     }
 
@@ -1422,7 +1652,9 @@
     initDevtoolsGuard();
     BaliPlex.player.focus();
 
-    if (sharedChannel) {
+    if (sharedFavouriteRefs && sharedFavouriteRefs.length) {
+      openSharedFavouritesFromRefs(sharedFavouriteRefs);
+    } else if (sharedChannel) {
       BaliPlex.player.whenReady(function () {
         playChannel(sharedChannel, { preferAutoplay: true });
         setStatus(
@@ -1433,7 +1665,7 @@
 
     // Warm country metadata in the background so filters are ready
     // when the user opens all channels.
-    if (!isDevtoolsBlocked()) {
+    if (!isDevtoolsBlocked() && !(sharedFavouriteRefs && sharedFavouriteRefs.length)) {
       loadMetadata()
         .then(populateCountries)
         .catch(function (error) {

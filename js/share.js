@@ -42,6 +42,19 @@ BaliPlex.share = (function () {
     return bytes;
   }
 
+  function encryptJson(value) {
+    const keyBytes = utf8Encode(KEY);
+    const plain = utf8Encode(JSON.stringify(value));
+    return toBase64Url(xorBytes(plain, keyBytes));
+  }
+
+  function decryptJson(token) {
+    if (!token) return null;
+    const keyBytes = utf8Encode(KEY);
+    const plain = utf8Decode(xorBytes(fromBase64Url(token), keyBytes));
+    return JSON.parse(plain);
+  }
+
   function pack(channel) {
     return {
       i: channel.id || "",
@@ -75,44 +88,113 @@ BaliPlex.share = (function () {
 
   function encode(channel) {
     if (!channel || !channel.url) return "";
-
-    const keyBytes = utf8Encode(KEY);
-    const plain = utf8Encode(JSON.stringify(pack(channel)));
-    return toBase64Url(xorBytes(plain, keyBytes));
+    return encryptJson(pack(channel));
   }
 
   function decode(token) {
-    if (!token) return null;
-
     try {
-      const keyBytes = utf8Encode(KEY);
-      const plain = utf8Decode(xorBytes(fromBase64Url(token), keyBytes));
-      return unpack(JSON.parse(plain));
+      return unpack(decryptJson(token));
     } catch (error) {
       console.warn("Could not decode shared channel:", error);
       return null;
     }
   }
 
-  function readTokenFromLocation() {
-    const hash = String(window.location.hash || "").replace(/^#/, "");
-    if (hash) {
-      const hashParams = new URLSearchParams(hash);
-      const fromHash = hashParams.get("c");
-      if (fromHash) return fromHash;
+  function favouritesRef(channel) {
+    if (!channel) return null;
+    if (channel.id) return { i: String(channel.id) };
+    if (channel.url) return { u: String(channel.url) };
+    return null;
+  }
 
-      // Support raw "#c=TOKEN" without treating as search-style params badly
-      if (hash.indexOf("c=") === 0) {
-        return decodeURIComponent(hash.slice(2));
-      }
+  function encodeFavourites(channels) {
+    if (!Array.isArray(channels) || !channels.length) return "";
+
+    const refs = [];
+    const seen = new Set();
+
+    channels.forEach(function (channel) {
+      const ref = favouritesRef(channel);
+      if (!ref) return;
+      const key = ref.i ? "i:" + ref.i : "u:" + ref.u;
+      if (seen.has(key)) return;
+      seen.add(key);
+      refs.push(ref);
+    });
+
+    if (!refs.length) return "";
+    return encryptJson(refs);
+  }
+
+  function decodeFavourites(token) {
+    try {
+      const parsed = decryptJson(token);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(function (ref) {
+        return ref && typeof ref === "object" && (ref.i || ref.u);
+      });
+    } catch (error) {
+      console.warn("Could not decode shared favourites:", error);
+      return [];
+    }
+  }
+
+  function resolveFavourites(refs, allChannels) {
+    if (!Array.isArray(refs) || !refs.length || !Array.isArray(allChannels)) {
+      return [];
     }
 
+    const byId = new Map();
+    const byUrl = new Map();
+
+    allChannels.forEach(function (channel) {
+      if (channel.id && !byId.has(channel.id)) {
+        byId.set(channel.id, channel);
+      }
+      if (channel.url) {
+        byUrl.set(channel.url, channel);
+      }
+    });
+
+    const resolved = [];
+    const seen = new Set();
+
+    refs.forEach(function (ref) {
+      let channel = null;
+      if (ref.i) channel = byId.get(ref.i) || null;
+      if (!channel && ref.u) channel = byUrl.get(ref.u) || null;
+      if (!channel) return;
+
+      const key = channel.url || channel.id || channel.name;
+      if (seen.has(key)) return;
+      seen.add(key);
+      resolved.push(channel);
+    });
+
+    return resolved;
+  }
+
+  function readHashParams() {
+    const hash = String(window.location.hash || "").replace(/^#/, "");
+    if (!hash) return new URLSearchParams();
+    return new URLSearchParams(hash);
+  }
+
+  function readTokenFromLocation(param) {
+    const hashParams = readHashParams();
+    const fromHash = hashParams.get(param);
+    if (fromHash) return fromHash;
+
     const searchParams = new URLSearchParams(window.location.search);
-    return searchParams.get("c");
+    return searchParams.get(param);
   }
 
   function readFromLocation() {
-    return decode(readTokenFromLocation());
+    return decode(readTokenFromLocation("c"));
+  }
+
+  function readFavouritesFromLocation() {
+    return decodeFavourites(readTokenFromLocation("f"));
   }
 
   function buildUrl(channel) {
@@ -125,10 +207,40 @@ BaliPlex.share = (function () {
     return url.toString();
   }
 
+  function buildFavouritesUrl(channels) {
+    const token = encodeFavourites(channels);
+    if (!token) return "";
+
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "f=" + token;
+    return url.toString();
+  }
+
+  function clearFavouritesFromLocation() {
+    const url = new URL(window.location.href);
+    const params = new URLSearchParams(url.search);
+    params.delete("f");
+    url.search = params.toString();
+
+    const hashParams = readHashParams();
+    hashParams.delete("f");
+    const nextHash = hashParams.toString();
+    url.hash = nextHash ? nextHash : "";
+
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }
+
   return {
     encode,
     decode,
     buildUrl,
-    readFromLocation
+    readFromLocation,
+    encodeFavourites,
+    decodeFavourites,
+    resolveFavourites,
+    buildFavouritesUrl,
+    readFavouritesFromLocation,
+    clearFavouritesFromLocation
   };
 })();

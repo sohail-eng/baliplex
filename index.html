@@ -56,6 +56,46 @@
     </div>
   </div>
 
+  <div
+    id="sharedFavouritesModal"
+    class="share-modal"
+    hidden
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="sharedFavouritesTitle"
+    aria-describedby="sharedFavouritesCopy"
+  >
+    <div class="share-modal-card">
+      <div class="share-modal-head">
+        <div class="share-modal-heading">
+          <h2 id="sharedFavouritesTitle">Shared favourites</h2>
+          <p id="sharedFavouritesCopy">
+            Tap the heart on any channel you want to save. Nothing is added until you choose.
+          </p>
+        </div>
+        <button
+          type="button"
+          id="sharedFavouritesClose"
+          class="share-modal-close"
+          title="Close"
+          aria-label="Close shared favourites"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+
+      <div id="sharedFavouritesLoading" class="share-modal-loading" hidden>
+        <div class="share-modal-spinner" aria-hidden="true"></div>
+        <p id="sharedFavouritesLoadingText">Loading playlist…</p>
+      </div>
+
+      <div id="sharedFavouritesList" class="share-modal-list" hidden></div>
+      <p id="sharedFavouritesEmpty" class="share-modal-empty" hidden></p>
+    </div>
+  </div>
+
   <div class="app">
     <aside class="sidebar">
       <div class="sidebar-toolbar">
@@ -79,6 +119,21 @@
             All channels
           </button>
         </div>
+        <button
+          type="button"
+          id="shareFavouritesBtn"
+          class="icon-btn"
+          title="Share favourites"
+          aria-label="Share favourites"
+          hidden
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="18" cy="5" r="3" />
+            <circle cx="6" cy="12" r="3" />
+            <circle cx="18" cy="19" r="3" />
+            <path d="M8.6 13.5l6.8 3.9M15.4 6.6l-6.8 3.9" stroke-linecap="round" />
+          </svg>
+        </button>
         <button
           type="button"
           id="refreshBtn"
