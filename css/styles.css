@@ -352,6 +352,26 @@ body.devtools-blocked {
   line-height: 1.45;
 }
 
+.share-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.share-modal-actions[hidden] {
+  display: none;
+}
+
+.share-modal-add-all {
+  min-width: 110px;
+}
+
+.share-modal-add-all:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 body.share-modal-open {
   overflow: hidden;
 }

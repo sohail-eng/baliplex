@@ -90,6 +90,33 @@ BaliPlex.favourites = (function () {
     return true;
   }
 
+  function addAll(channels) {
+    if (!Array.isArray(channels) || !channels.length) return 0;
+
+    const current = read();
+    const existing = new Set(
+      current.map(function (item) {
+        return channelKey(item);
+      })
+    );
+    let added = 0;
+
+    // Keep shared order at the front: last unshifted ends up first,
+    // so walk reversed to preserve the shared list order.
+    for (let i = channels.length - 1; i >= 0; i -= 1) {
+      const channel = channels[i];
+      if (!channel || !channel.url) continue;
+      const key = channelKey(channel);
+      if (existing.has(key)) continue;
+      current.unshift(toStored(channel));
+      existing.add(key);
+      added += 1;
+    }
+
+    if (added > 0) write(current);
+    return added;
+  }
+
   function count() {
     return read().length;
   }
@@ -98,6 +125,7 @@ BaliPlex.favourites = (function () {
     list,
     isFavourite,
     toggle,
+    addAll,
     count,
     channelKey
   };

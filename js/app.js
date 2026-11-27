@@ -16,6 +16,7 @@
   let filteredChannels = [];
   let activeChannel = null;
   let sharedChannel = null;
+  let sharedFavouritesChannels = [];
   let countrySelect = null;
   let categorySelect = null;
   let listMode = "favourites";
@@ -75,7 +76,9 @@
       "sharedFavouritesLoadingText"
     ),
     sharedFavouritesList: document.getElementById("sharedFavouritesList"),
-    sharedFavouritesEmpty: document.getElementById("sharedFavouritesEmpty")
+    sharedFavouritesEmpty: document.getElementById("sharedFavouritesEmpty"),
+    sharedFavouritesActions: document.getElementById("sharedFavouritesActions"),
+    sharedFavouritesAddAll: document.getElementById("sharedFavouritesAddAll")
   };
 
   const VOLUME_STEP = 0.05;
@@ -1294,7 +1297,13 @@
 
   function closeSharedFavouritesModal() {
     setSharedFavouritesModalOpen(false);
+    sharedFavouritesChannels = [];
     if (els.sharedFavouritesList) els.sharedFavouritesList.innerHTML = "";
+    if (els.sharedFavouritesActions) els.sharedFavouritesActions.hidden = true;
+    if (els.sharedFavouritesAddAll) {
+      els.sharedFavouritesAddAll.disabled = false;
+      els.sharedFavouritesAddAll.textContent = "Add all";
+    }
     if (shareApi && typeof shareApi.clearFavouritesFromLocation === "function") {
       shareApi.clearFavouritesFromLocation();
     }
@@ -1314,6 +1323,47 @@
       els.sharedFavouritesEmpty.hidden = true;
       els.sharedFavouritesEmpty.textContent = "";
     }
+    if (els.sharedFavouritesActions) els.sharedFavouritesActions.hidden = true;
+  }
+
+  function refreshSharedFavouritesHearts() {
+    if (!els.sharedFavouritesList) return;
+    const buttons = els.sharedFavouritesList.querySelectorAll(".fav-btn");
+    buttons.forEach(function (button, index) {
+      const channel = sharedFavouritesChannels[index];
+      if (channel) syncHeartButton(button, channel);
+    });
+  }
+
+  function addAllSharedFavourites() {
+    if (!sharedFavouritesChannels.length) return;
+
+    const added = favouritesApi.addAll(sharedFavouritesChannels);
+    updateModeTabs();
+    updateHeaderCount();
+
+    if (listMode === "favourites") {
+      populateCategoriesFrom(getFavouritesWithShared());
+      renderChannels({ resetPage: true });
+    }
+
+    refreshSharedFavouritesHearts();
+
+    if (els.sharedFavouritesAddAll) {
+      els.sharedFavouritesAddAll.disabled = true;
+      els.sharedFavouritesAddAll.textContent =
+        added > 0 ? "Added" : "Already saved";
+    }
+
+    setStatus(
+      added > 0
+        ? "Added " +
+            added.toLocaleString() +
+            " channel" +
+            (added === 1 ? "" : "s") +
+            " to favourites"
+        : "All shared channels were already in favourites"
+    );
   }
 
   function createSharedFavouriteItem(channel) {
@@ -1349,6 +1399,7 @@
   function renderSharedFavouritesList(resolved, requestedCount) {
     if (!els.sharedFavouritesList || !els.sharedFavouritesEmpty) return;
 
+    sharedFavouritesChannels = resolved.slice();
     if (els.sharedFavouritesLoading) els.sharedFavouritesLoading.hidden = true;
 
     if (!resolved.length) {
@@ -1359,6 +1410,7 @@
         requestedCount > 0
           ? "None of the shared channels could be found in the playlist."
           : "This favourites share link is empty or invalid.";
+      if (els.sharedFavouritesActions) els.sharedFavouritesActions.hidden = true;
       return;
     }
 
@@ -1372,6 +1424,15 @@
     });
     els.sharedFavouritesList.appendChild(fragment);
 
+    if (els.sharedFavouritesActions) els.sharedFavouritesActions.hidden = false;
+    if (els.sharedFavouritesAddAll) {
+      const pending = resolved.some(function (channel) {
+        return !favouritesApi.isFavourite(channel);
+      });
+      els.sharedFavouritesAddAll.disabled = !pending;
+      els.sharedFavouritesAddAll.textContent = pending ? "Add all" : "Already saved";
+    }
+
     const missing = Math.max(0, requestedCount - resolved.length);
     setStatus(
       "Shared favourites ready · " +
@@ -1379,7 +1440,7 @@
         " channel" +
         (resolved.length === 1 ? "" : "s") +
         (missing ? " · " + missing + " not found" : "") +
-        " · heart the ones you want"
+        " · heart the ones you want or Add all"
     );
   }
 
@@ -1623,6 +1684,10 @@
 
     if (els.sharedFavouritesClose) {
       els.sharedFavouritesClose.addEventListener("click", closeSharedFavouritesModal);
+    }
+
+    if (els.sharedFavouritesAddAll) {
+      els.sharedFavouritesAddAll.addEventListener("click", addAllSharedFavourites);
     }
 
     if (els.sharedFavouritesModal) {
