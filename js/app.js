@@ -77,7 +77,6 @@
     ),
     sharedFavouritesList: document.getElementById("sharedFavouritesList"),
     sharedFavouritesEmpty: document.getElementById("sharedFavouritesEmpty"),
-    sharedFavouritesActions: document.getElementById("sharedFavouritesActions"),
     sharedFavouritesAddAll: document.getElementById("sharedFavouritesAddAll")
   };
 
@@ -1299,8 +1298,8 @@
     setSharedFavouritesModalOpen(false);
     sharedFavouritesChannels = [];
     if (els.sharedFavouritesList) els.sharedFavouritesList.innerHTML = "";
-    if (els.sharedFavouritesActions) els.sharedFavouritesActions.hidden = true;
     if (els.sharedFavouritesAddAll) {
+      els.sharedFavouritesAddAll.hidden = true;
       els.sharedFavouritesAddAll.disabled = false;
       els.sharedFavouritesAddAll.textContent = "Add all";
     }
@@ -1323,7 +1322,7 @@
       els.sharedFavouritesEmpty.hidden = true;
       els.sharedFavouritesEmpty.textContent = "";
     }
-    if (els.sharedFavouritesActions) els.sharedFavouritesActions.hidden = true;
+    if (els.sharedFavouritesAddAll) els.sharedFavouritesAddAll.hidden = true;
   }
 
   function refreshSharedFavouritesHearts() {
@@ -1410,7 +1409,7 @@
         requestedCount > 0
           ? "None of the shared channels could be found in the playlist."
           : "This favourites share link is empty or invalid.";
-      if (els.sharedFavouritesActions) els.sharedFavouritesActions.hidden = true;
+      if (els.sharedFavouritesAddAll) els.sharedFavouritesAddAll.hidden = true;
       return;
     }
 
@@ -1424,11 +1423,11 @@
     });
     els.sharedFavouritesList.appendChild(fragment);
 
-    if (els.sharedFavouritesActions) els.sharedFavouritesActions.hidden = false;
     if (els.sharedFavouritesAddAll) {
       const pending = resolved.some(function (channel) {
         return !favouritesApi.isFavourite(channel);
       });
+      els.sharedFavouritesAddAll.hidden = false;
       els.sharedFavouritesAddAll.disabled = !pending;
       els.sharedFavouritesAddAll.textContent = pending ? "Add all" : "Already saved";
     }

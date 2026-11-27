@@ -69,9 +69,19 @@
       <div class="share-modal-head">
         <div class="share-modal-heading">
           <h2 id="sharedFavouritesTitle">Shared favourites</h2>
-          <p id="sharedFavouritesCopy">
-            Tap the heart on any channel you want to save, or add them all. Nothing is added until you choose.
-          </p>
+          <div class="share-modal-intro">
+            <p id="sharedFavouritesCopy">
+              Tap the heart on any channel you want to save. Nothing is added until you choose.
+            </p>
+            <button
+              type="button"
+              id="sharedFavouritesAddAll"
+              class="primary-btn share-modal-add-all"
+              hidden
+            >
+              Add all
+            </button>
+          </div>
         </div>
         <button
           type="button"
@@ -93,16 +103,6 @@
 
       <div id="sharedFavouritesList" class="share-modal-list" hidden></div>
       <p id="sharedFavouritesEmpty" class="share-modal-empty" hidden></p>
-
-      <div id="sharedFavouritesActions" class="share-modal-actions" hidden>
-        <button
-          type="button"
-          id="sharedFavouritesAddAll"
-          class="primary-btn share-modal-add-all"
-        >
-          Add all
-        </button>
-      </div>
     </div>
   </div>
 
