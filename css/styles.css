@@ -167,6 +167,12 @@ body.devtools-blocked {
   transform: none;
 }
 
+#shareFavouritesBtn.is-copied {
+  background: var(--bp-accent);
+  border-color: var(--bp-accent);
+  color: #fff;
+}
+
 .icon-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;

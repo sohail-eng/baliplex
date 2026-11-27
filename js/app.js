@@ -1138,31 +1138,98 @@
     shareFeedbackTimer = setTimeout(resetShareButtonLabel, 1800);
   }
 
-  async function copyOrShareLink(url, title, text) {
+  function showFavouritesShareCopied() {
+    if (!els.shareFavouritesBtn) return;
+    const previousTitle = els.shareFavouritesBtn.title;
+    els.shareFavouritesBtn.classList.add("is-copied");
+    els.shareFavouritesBtn.title = "Favourites link copied";
+    els.shareFavouritesBtn.setAttribute("aria-label", "Favourites link copied");
+
+    if (shareFeedbackTimer) clearTimeout(shareFeedbackTimer);
+    shareFeedbackTimer = setTimeout(function () {
+      els.shareFavouritesBtn.classList.remove("is-copied");
+      els.shareFavouritesBtn.title = previousTitle || "Share favourites";
+      els.shareFavouritesBtn.setAttribute(
+        "aria-label",
+        previousTitle || "Share favourites"
+      );
+    }, 1800);
+  }
+
+  async function copyTextFallback(url) {
+    const field = document.createElement("textarea");
+    field.value = url;
+    field.setAttribute("readonly", "");
+    field.style.position = "fixed";
+    field.style.top = "0";
+    field.style.left = "0";
+    field.style.width = "1px";
+    field.style.height = "1px";
+    field.style.opacity = "0";
+    document.body.appendChild(field);
+    field.focus();
+    field.select();
+    field.setSelectionRange(0, field.value.length);
+
+    let ok = false;
     try {
-      if (navigator.share) {
-        await navigator.share({ title: title, text: text, url: url });
-        return "shared";
-      }
+      ok = document.execCommand("copy");
     } catch (error) {
-      if (error && error.name === "AbortError") return "aborted";
+      console.warn("Fallback copy failed:", error);
     }
 
+    document.body.removeChild(field);
+    return ok;
+  }
+
+  async function copyOrShareLink(url, title, text) {
+    let copied = false;
+
+    // Copy first so desktop clicks always do something visible.
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(url);
-        return "copied";
+        copied = true;
       }
     } catch (error) {
       console.warn("Clipboard share failed:", error);
     }
+
+    if (!copied) {
+      copied = await copyTextFallback(url);
+    }
+
+    const preferNativeShare =
+      typeof navigator.share === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+
+    if (preferNativeShare) {
+      try {
+        await navigator.share({ title: title, text: text, url: url });
+        return "shared";
+      } catch (error) {
+        if (error && error.name === "AbortError") {
+          return copied ? "copied" : "aborted";
+        }
+        console.warn("Native share failed:", error);
+      }
+    }
+
+    if (copied) return "copied";
 
     window.prompt("Copy this share link:", url);
     return "prompted";
   }
 
   async function shareActiveChannel() {
-    if (!activeChannel || !shareApi) return;
+    if (!activeChannel) {
+      setStatus("Select a channel before sharing");
+      return;
+    }
+    if (!shareApi) {
+      setStatus("Share is unavailable right now");
+      return;
+    }
 
     const url = shareApi.buildUrl(activeChannel);
     if (!url) {
@@ -1181,11 +1248,16 @@
       setStatus("Share link copied");
     } else if (result === "prompted") {
       setStatus("Copy the share link to send this channel");
+    } else {
+      setStatus("Sharing was cancelled");
     }
   }
 
   async function shareFavouritesList() {
-    if (!shareApi) return;
+    if (!shareApi) {
+      setStatus("Share is unavailable right now");
+      return;
+    }
 
     const favs = favouritesApi.list();
     if (!favs.length) {
@@ -1207,7 +1279,10 @@
     if (result === "shared") {
       setStatus("Shared " + favs.length + " favourites");
     } else if (result === "copied" || result === "prompted") {
-      setStatus("Favourites share link ready");
+      showFavouritesShareCopied();
+      setStatus("Favourites share link copied");
+    } else {
+      setStatus("Sharing was cancelled");
     }
   }
 
@@ -1530,13 +1605,19 @@
 
     if (els.shareChannel) {
       els.shareChannel.addEventListener("click", function () {
-        shareActiveChannel();
+        shareActiveChannel().catch(function (error) {
+          console.warn("Channel share failed:", error);
+          setStatus("Could not share this channel");
+        });
       });
     }
 
     if (els.shareFavouritesBtn) {
       els.shareFavouritesBtn.addEventListener("click", function () {
-        shareFavouritesList();
+        shareFavouritesList().catch(function (error) {
+          console.warn("Favourites share failed:", error);
+          setStatus("Could not share favourites");
+        });
       });
     }
 
